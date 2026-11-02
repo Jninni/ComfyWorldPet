@@ -124,9 +124,10 @@ function paintGround(texW: number, texH: number): HTMLCanvasElement {
     }
     ctx.shadowBlur = 0;
   };
-  strokePaths(1.2, "#d9e7a6", 6 * s);
-  strokePaths(0.4, "#e8d2a8");
-  strokePaths(-0.2, "#f3e2bf");
+  strokePaths(1.0, "rgba(110,160,90,0.16)");
+  strokePaths(0.35, "#dcbf93");
+  strokePaths(-0.15, "#f3e2bf");
+  strokePaths(-1.2, "#f7ead0");
   // plaza: round tiled stone
   const [pu, pv] = toPx(PLAZA.x, PLAZA.z);
   ctx.fillStyle = "#e6d9ef";

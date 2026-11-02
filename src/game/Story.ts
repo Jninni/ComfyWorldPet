@@ -107,6 +107,7 @@ export class Story {
   }
 
   start(id: string) {
+    if (this.g.state.quests[id]) return;
     this.g.state.quests[id] = { stage: 0, progress: 0, done: false };
     audio.sfx("quest");
     this.g.ui.toast(`New quest: ${QUESTS[id].name}`, QUESTS[id].icon, QUESTS[id].color);

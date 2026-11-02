@@ -7,7 +7,7 @@ import fs from "fs";
 const [prefix = "tools/shots/play", scriptPath, w = "1280", h = "800", url = "http://localhost:5173/"] = process.argv.slice(2);
 const steps = scriptPath ? JSON.parse(fs.readFileSync(scriptPath, "utf8")) : [{ wait: 3000 }, { shot: "title" }];
 const browser = await chromium.launch({ args: ["--use-angle=swiftshader", "--enable-unsafe-swiftshader", "--ignore-gpu-blocklist"] });
-const page = await browser.newPage({ viewport: { width: +w, height: +h } });
+const page = await browser.newPage({ viewport: { width: +w, height: +h }, hasTouch: !!process.env.TOUCH, isMobile: false });
 const logs = [];
 page.on("console", (m) => { const t = m.text(); if (!t.includes("Babylon.js v") && !t.includes("[vite]")) logs.push(`[${m.type()}] ${t}`); });
 page.on("pageerror", (e) => logs.push(`[pageerror] ${e.message}\n${e.stack}`));

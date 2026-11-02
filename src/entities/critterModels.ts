@@ -267,18 +267,18 @@ class Critter implements CritterModel {
     if (c.gait === "hop" || c.gait === "bounce") {
       const C = c.gait === "hop" ? 0.3 : 0.42;
       const want = !st.sleeping && !this.emK && (tgt > 0.05 || !!st.excited);
-      const ampFor = () => (tgt > 0.05 ? 0.6 + 0.4 * tgt : 0.45);
+      const hopAmp = tgt > 0.05 ? 0.6 + 0.4 * tgt : 0.45;
       if (want && !this.cycling) {
         this.cycling = true;
         this.phase = 0;
-        this.amp = ampFor();
+        this.amp = hopAmp;
       }
       if (this.cycling) {
         const prev = this.phase;
         this.phase += dt * Math.max(rate, want ? 0 : c.freq);
         if (this.phase >= 1) {
           this.phase -= 1;
-          if (want) this.amp = ampFor();
+          if (want) this.amp = hopAmp;
         }
         if (!want && prev < C && this.phase >= C) {
           this.phase = 0;
@@ -408,7 +408,8 @@ class Critter implements CritterModel {
 
     /* ---------------- secondary-motion springs ---------------- */
     const top = by + sy * H * 0.6;
-    let ryaw = this.root.rotationQuaternion ? 0 : this.root.rotation.y;
+    const rq = this.root.rotationQuaternion;
+    const ryaw = rq ? Math.atan2(2 * (rq.w * rq.y + rq.x * rq.z), 1 - 2 * (rq.y * rq.y + rq.x * rq.x)) : this.root.rotation.y;
     if (this.first) {
       this.pTop = top;
       this.pV = 0;
@@ -472,7 +473,8 @@ class Critter implements CritterModel {
     hd.position.set(this.headRest.x, this.headRest.y + jig * c.headLag - c.sleepHeadDrop * sl, this.headRest.z);
 
     /* ---------------- ears ---------------- */
-    for (const e of R.ears) {
+    for (let i = 0; i < R.ears.length; i++) {
+      const e = R.ears[i];
       e.twT -= dt;
       if (e.twT <= 0) {
         e.twT = 1.5 + this.rand() * 5;
@@ -487,7 +489,8 @@ class Critter implements CritterModel {
     }
 
     /* ---------------- tails ---------------- */
-    for (const tl of R.tails) {
+    for (let i = 0; i < R.tails.length; i++) {
+      const tl = R.tails[i];
       const f = tl.f * (1 + ex * 1.6);
       const sway = (Math.sin(t * f) * tl.amp * (1 + ex * 1.2) * (1 - mv * 0.6) + Math.sin(th) * tl.walk * mv) * awake + jx * 0.9;
       const lift = jig * tl.gain - this.earDroop * 0.45 + tl.curlX * sl + this.earPerk * 0.2;
@@ -504,7 +507,8 @@ class Critter implements CritterModel {
       }
       this.flutter = Math.max(0, this.flutter - dt * 1.4);
     }
-    for (const w of R.wings) {
+    for (let i = 0; i < R.wings.length; i++) {
+      const w = R.wings[i];
       let a = 0;
       if (w.kind === "bat") {
         const flap = Math.sin(th);
@@ -517,11 +521,14 @@ class Critter implements CritterModel {
         a = w.rest + (aflap * w.amp * (0.55 + 0.45 * fast) + 0.05 * Math.sin(t * 2.2) + walkFlap) * awake - this.earDroop * 0.1;
       }
       w.n.rotation.z = w.side * a;
+      // bats wrap their wings around themselves to sleep
+      if (w.kind === "bat") w.n.rotation.y = -w.side * 1.25 * sl;
     }
 
     /* ---------------- legs ---------------- */
     const hop = c.gait === "hop" || c.gait === "bounce";
-    for (const L of R.legs) {
+    for (let i = 0; i < R.legs.length; i++) {
+      const L = R.legs[i];
       let dz = 0,
         dy = 0,
         rx = 0;
@@ -739,7 +746,7 @@ function buildPuffbun(c: Ctx): Critter {
       blobM(s, [0.058, 0.175, 0.04], ctr, P.fur, rot, P.furB),
       blobM(s, [0.032, 0.13, 0.02], add(add(ctr, fw, 0.026), up, 0.005), P.inner, rot),
     ]);
-    ears.push(ear(en, sd, 1.3, 0.75, 0.45));
+    ears.push(ear(en, sd, 0.9, 0.75, 0.3));
   }
   const rig: Partial<Rig> & { head: TransformNode; faces: Mesh[] } = { head, faces, ears };
   if (c.rare) addSparkle(c, rig, [-0.26, 0.82, 0.05]);
@@ -876,7 +883,7 @@ function buildFennix(c: Ctx): Critter {
   if (c.rare) addSparkle(c, rig, [-0.26, 0.78, 0.1]);
   return finish(
     c,
-    { gait: "trot", freq: 2.6, bob: 0.03, stride: 0.07, lift: 0.06, height: 0.8, radius: 0.3, sleepDrop: 0.065, sleepHeadPitch: 0.35, sleepHeadYaw: 0.45, sleepHeadRoll: 0.3, sleepHeadDrop: 0.05, sleepRoll: 0.08 },
+    { gait: "trot", freq: 2.6, bob: 0.03, stride: 0.07, lift: 0.06, height: 0.8, radius: 0.3, sleepDrop: 0.065, sleepHeadPitch: 0.2, sleepHeadYaw: 0.45, sleepHeadRoll: 0.38, sleepHeadDrop: 0.06, sleepRoll: 0.08 },
     rig,
   );
 }
@@ -1164,11 +1171,11 @@ function buildGlowbat(c: Ctx): Critter {
   const tips: Mesh[] = [];
   for (const sd of [-1, 1]) {
     const rot: V3 = [-0.05, 0, -sd * 0.42];
-    tips.push(ballM(s, 0.034, add([sd * 0.11, 0.33, 0.0], rotDir([-0.05, 0, -sd * 0.45], [0, 1, 0]), 0.225), P.glow, undefined, 8));
+    tips.push(ballM(s, 0.036, add([sd * 0.11, 0.33, 0.0], rotDir([-0.05, 0, -sd * 0.45], [0, 1, 0]), 0.245), P.glow, undefined, 8));
   }
   const st = surf(BE, 0, -0.42, 0.024);
   tips.push(puffStar(s, 5, 0.05, 0.024, 0.014, st.p, P.glow, rotZTo(st.n)));
-  k.part("glow", head, [0, 0.02, 0], tips, { outline: 0.012, material: toonMat(s, { name: "critterGlow" + (c.rare ? "R" : ""), emissive: P.glowE, rim: 0.1 }), shadow: false });
+  k.part("glow", head, [0, 0.02, 0], tips, { outline: false, material: toonMat(s, { name: "critterGlow" + (c.rare ? "R" : ""), emissive: P.glowE, rim: 0.1 }), shadow: false });
   const faces = buildHeads(k, head, [0, 0.02, 0], bs, {
     head: BE,
     eyeYaw: 0.38,
@@ -1333,7 +1340,7 @@ function buildMochi(c: Ctx): Critter {
   if (c.rare) addSparkle(c, rig, [0.27, 0.75, 0.1]);
   return finish(
     c,
-    { gait: "trot", freq: 2.8, bob: 0.025, stride: 0.065, lift: 0.055, height: 0.76, radius: 0.26, sleepDrop: 0.075, sleepHeadPitch: 0.42, sleepHeadYaw: 0.55, sleepHeadRoll: 0.35, sleepHeadDrop: 0.06, sleepRoll: 0.1 },
+    { gait: "trot", freq: 2.8, bob: 0.025, stride: 0.065, lift: 0.055, height: 0.76, radius: 0.26, sleepDrop: 0.075, sleepHeadPitch: 0.16, sleepHeadYaw: 0.5, sleepHeadRoll: 0.42, sleepHeadDrop: 0.07, sleepRoll: 0.1 },
     rig,
   );
 }

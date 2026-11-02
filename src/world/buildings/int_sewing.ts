@@ -2,6 +2,7 @@ import { Vector3, type Scene } from "@babylonjs/core";
 import type { InteriorDef } from "../../core/types";
 import { Kit, archPts, circlePts, heartPts, roundRectPts, tabPts, type V3 } from "./kit";
 import { RoomCtx, roomShell, finishInterior, makeRoot, onBack, onLeft, X0, Z1, WALL_H } from "./room";
+import { armchair } from "./int_teahouse";
 import { PI, heart, ivyStrand, pottedPlant, pictureFrame, daisyArt, wallShelf, fluffyRug, heartDrawer, bush, cord, petalPts, flower, bunting, archWindow } from "./props";
 import type { ColorLike } from "../../render/Shapes";
 import { mixCol } from "../../render/Palette";
@@ -354,29 +355,33 @@ export function buildSewing(scene: Scene, origin: Vector3): InteriorDef {
 
   // ---- rug, yarn basket ----
   fluffyRug(k, [-0.4, 0, -0.5], 1.9, "#fff3df", "#fffaf0", 1.15, 0.9);
+  // comfy knitting armchair
+  k.at(k.frame([-2.5, 0, -1.9], -0.55, 1.25), () => armchair(k, [0, 0, 0], 0, "#ffc0a6", "#fff3df", "#f39c80"));
+  ctx.box(-2.5, -1.9, 1.5, 1.5);
+  ctx.spot("seat", -2.5, 0.7, -1.9);
   const B: V3 = [-1.7, 0, 0.55];
   k.lathe(
     [
       [0, 0],
-      [0.4, 0],
-      [0.48, 0.1],
-      [0.52, 0.42],
-      [0.48, 0.42],
-      [0, 0.36],
+      [0.55, 0],
+      [0.65, 0.12],
+      [0.7, 0.55],
+      [0.64, 0.55],
+      [0, 0.48],
     ],
     B,
     "#e2b98c",
     { seg: 20, bottom: "#c99a6b" },
   );
-  for (const y of [0.12, 0.24, 0.36]) k.torus(0.5 + y * 0.08, 0.03, [B[0], y, B[2]], "#c99a6b", { seg: 22, key: "fine" });
-  yarnBall(k, [B[0] - 0.15, 0.48, B[2] + 0.05], 0.2, "#f7a8c0", 0);
-  yarnBall(k, [B[0] + 0.2, 0.47, B[2] - 0.05], 0.18, "#a8d8f0", 1);
-  yarnBall(k, [B[0] + 0.02, 0.5, B[2] + 0.22], 0.17, "#ffe066", 2);
+  for (const y of [0.15, 0.3, 0.45]) k.torus(0.66 + y * 0.08, 0.035, [B[0], y, B[2]], "#c99a6b", { seg: 22, key: "fine" });
+  yarnBall(k, [B[0] - 0.22, 0.62, B[2] + 0.05], 0.27, "#f7a8c0", 0);
+  yarnBall(k, [B[0] + 0.26, 0.6, B[2] - 0.08], 0.25, "#a8d8f0", 1);
+  yarnBall(k, [B[0] + 0.02, 0.66, B[2] + 0.3], 0.23, "#ffe066", 2);
   for (const s of [-1, 1]) {
-    k.rod(0.75, 0.018, [B[0] + s * 0.05, 0.72, B[2] + 0.05], "#fffdf8", { rot: [0.2, 0, s * 0.35], seg: 5 });
-    k.ball(0.045, [B[0] + s * 0.05 - s * Math.sin(0.35) * 0.4, 0.72 + 0.37, B[2] + 0.05 + 0.08], s > 0 ? "#f47a9a" : "#8fc3ea", { seg: 6 });
+    k.rod(0.95, 0.022, [B[0] + s * 0.05, 0.9, B[2] + 0.05], "#fffdf8", { rot: [0.2, 0, s * 0.35], seg: 5 });
+    k.ball(0.055, [B[0] + s * 0.05 - s * Math.sin(0.35) * 0.47, 0.9 + 0.45, B[2] + 0.05 + 0.09], s > 0 ? "#f47a9a" : "#8fc3ea", { seg: 6 });
   }
-  ctx.circle(B[0], B[2], 0.6);
+  ctx.circle(B[0], B[2], 0.75);
   ctx.spot("item_yarn", B[0], 0.5, B[2]);
   ctx.spot("rug", -0.4, 0.07, -0.5);
 
@@ -411,7 +416,7 @@ export function buildSewing(scene: Scene, origin: Vector3): InteriorDef {
           },
           [0, 0, 0],
           dc[i],
-          { segA: 24, scale: [0.5, 1, 0.4] },
+          { segA: 24, scale: [0.85, 1.15, 0.5] },
         );
       });
     }

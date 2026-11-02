@@ -1,5 +1,7 @@
 import { input, type Btn } from "../core/Input";
 import { audio } from "../audio/Audio";
+import { Critter } from "../minigames/critter";
+import type { SpeciesId } from "../data/species";
 
 type Child = Node | string | null | undefined | false;
 
@@ -125,6 +127,21 @@ export class Nav {
 /* ------------------------------------------------------------------ */
 
 export function portrait(species: string, color: string, size = 128, mood: "happy" | "sleep" = "happy"): HTMLCanvasElement {
+  try {
+    const cv = document.createElement("canvas");
+    cv.width = cv.height = size;
+    const g = cv.getContext("2d")!;
+    const c = new Critter(species as SpeciesId, color);
+    c.update(0.016);
+    const S = size * 0.3;
+    c.draw(g, size / 2, size - S * 0.92 - size * 0.06, S);
+    return cv;
+  } catch {
+    return legacyPortrait(species, color, size, mood);
+  }
+}
+
+function legacyPortrait(species: string, color: string, size = 128, mood: "happy" | "sleep" = "happy"): HTMLCanvasElement {
   const cv = document.createElement("canvas");
   cv.width = cv.height = size;
   const c = cv.getContext("2d")!;

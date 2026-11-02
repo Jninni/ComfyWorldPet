@@ -79,6 +79,9 @@ export class Game {
   private nearest: Interact | null = null;
   private haven: WildCritter[] = [];
   private saveTimer = 0;
+  private enteredAt = 0;
+  /** tests: skip minigames with an automatic win */
+  debugAutoWin = false;
   private guide = h(".guide-arrow", null, h(".ga-in", null, "➜"));
   private hintEl: HTMLElement | null = null;
   private hintMoved = 0;
@@ -106,6 +109,9 @@ export class Game {
       { passive: true },
     );
     this.setupPinch(canvas);
+    document.addEventListener("visibilitychange", () => {
+      if (document.hidden && this.mode !== "title") this.save();
+    });
   }
 
   private setupPinch(canvas: HTMLCanvasElement) {
@@ -429,6 +435,7 @@ export class Game {
       audio.music(L.music);
     }
     this.state.location = { where: id, x: p.x, z: p.z, rot };
+    this.enteredAt = this.time;
     this.refreshNpcMarkers();
     if (fade) await this.ui.fade(false);
     if (L.id === "cave") this.ui.showBanner(ZONE_INFO.cave.name, ZONE_INFO.cave.subtitle);
@@ -494,13 +501,13 @@ export class Game {
         if (w.respawnAt && this.time > w.respawnAt) this.respawnWild(L, w);
         continue;
       }
-      const far = Vector3.DistanceSquared(w.pos, pp) > 70 * 70;
+      const far = Vector3.DistanceSquared(w.pos, pp) > 46 * 46;
       if (far !== !w.model.root.isEnabled()) w.model.root.setEnabled(!far);
       if (!far) w.update(dt, pp, this.player.speed, L.collision, L.ground, (c, g) => this.ui.emote(() => c.pos.add(new Vector3(0, c.model.height + 0.2, 0)), g));
     }
     if (L.id === "overworld")
       for (const w of this.haven) {
-        if (Vector3.DistanceSquared(w.pos, pp) < 80 * 80) w.update(dt, pp, 0, L.collision, L.ground, () => {});
+        if (Vector3.DistanceSquared(w.pos, pp) < 46 * 46) w.update(dt, pp, 0, L.collision, L.ground, () => {});
       }
     // NPCs
     for (const n of this.npcs.values()) if (n.location === L.id) n.update(dt, pp);
@@ -579,7 +586,7 @@ export class Game {
       } else this.ui.showPrompt(null, "");
     }
     // auto-trigger exits (door mats) by walking onto them
-    if (b && b.id.endsWith("_exit") && bestD < 0.9 && this.player.speed > 0.2) {
+    if (b && b.id.endsWith("_exit") && bestD < 0.9 && this.player.speed > 0.2 && this.time - this.enteredAt > 1.2) {
       this.runInteract(b);
       return;
     }
@@ -861,7 +868,7 @@ export class Game {
       diff = Math.max(1, Math.min(3, diff));
       this.ui.setHudVisible(false);
       this.ui.setTouchVisible(false);
-      const res = await playMinigame(info.game, { species: w.species, critterName: info.name, color: info.color, difficulty: diff as 1 | 2 | 3 });
+      const res = this.debugAutoWin ? { success: true, stars: 3 as const } : await playMinigame(info.game, { species: w.species, critterName: info.name, color: info.color, difficulty: diff as 1 | 2 | 3 });
       this.ui.setHudVisible(true);
       this.ui.setTouchVisible(true);
       audio.music(this.zone === "interior" ? this.current.music : ZONE_INFO[this.zone].music);
@@ -1267,6 +1274,7 @@ export class Game {
 
   /** Debug helper for automated tests. */
   debugTeleport(where: string, x?: number, z?: number) {
+    this.camShot = null;
     if (where === "overworld" && x !== undefined && z !== undefined) return this.goTo("overworld", { x, z, rot: 0 }, false);
     return this.goTo(where, undefined, false);
   }

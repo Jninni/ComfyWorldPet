@@ -743,7 +743,7 @@ function flower(k: Kit, kind: FlowerKind, lx: number, lz: number, color: ColorLi
       const h = k.rand(0.22, 0.34);
       k.put(stemMesh(k.scene, h, 0.018, stem), [lx, 0, lz], ZERO, 1, to);
       const tilt: V3 = [k.rand(-0.35, 0.05), k.rand(0, TAU), 0];
-      k.put(petals(k.scene, 0.09, 6, { color: color }, 0.022), tip(h), tilt, 1, to);
+      k.put(petals(k.scene, 0.11, 6, { color: color }, 0.024), tip(h), tilt, 1, to);
       k.put(elb(k.scene, 0.032, 0.022, 0.032, { color: "butterDeep" }, 5), [lx, h + 0.025, lz], tilt, 1, to);
       break;
     }
@@ -768,7 +768,7 @@ function flower(k: Kit, kind: FlowerKind, lx: number, lz: number, color: ColorLi
         ),
         [lx, h - 0.02, lz],
         [0, k.rand(0, 1), 0],
-        1,
+        1.3,
         to,
       );
       break;
@@ -836,13 +836,13 @@ export function addFlowerPatch(b: Batch, x: number, z: number, radius: number, o
 /* Rocks, crystals, mushrooms                                          */
 /* ================================================================== */
 
-const STONE_COLS = ["#e1d8ee", "#d9cdef", "#f0d6e2", "#d3e6df", "#e6e0d4", "#cfdcf0"];
+const STONE_COLS = ["#d6c9ec", "#cdbfe8", "#ecc9da", "#c2dcd6", "#ddd3c6", "#c3d3ee"];
 
 export function addRock(b: Batch, x: number, z: number, o: PropOpts & { moss?: boolean } = {}): Collider {
   const k = new Kit(b, x, z, o);
   const c = o.color ?? k.pick(STONE_COLS);
   const rot: V3 = [k.rand(-0.15, 0.15), k.rand(0, TAU), k.rand(-0.15, 0.15)];
-  k.blob(0.55, 0.42, 0.48, [0, 0.26, 0], jitterCol(c, 0.03, k.r), dk(c, 0.22), rot, 8);
+  k.blob(0.55, 0.42, 0.48, [0, 0.26, 0], lt(jitterCol(c, 0.03, k.r), 0.25), dk(c, 0.3), rot, 9);
   const n = 1 + Math.floor(k.r() * 2);
   let maxR = 0.55;
   for (let i = 0; i < n; i++) {
@@ -850,7 +850,7 @@ export function addRock(b: Batch, x: number, z: number, o: PropOpts & { moss?: b
       d = k.rand(0.45, 0.6);
     const r = k.rand(0.22, 0.32);
     maxR = Math.max(maxR, d + r);
-    k.blob(r, r * 0.75, r * 0.9, [Math.cos(a) * d, r * 0.5, Math.sin(a) * d], jitterCol(c, 0.04, k.r), dk(c, 0.2), [0, k.rand(0, 6), 0], 7);
+    k.blob(r, r * 0.75, r * 0.9, [Math.cos(a) * d, r * 0.5, Math.sin(a) * d], lt(jitterCol(c, 0.04, k.r), 0.2), dk(c, 0.3), [0, k.rand(0, 6), 0], 7);
   }
   if (o.moss ?? k.r() < 0.45) {
     k.blob(0.36, 0.1, 0.3, [0.04, 0.6, -0.02], "moss", "leafDeep", [0.1, k.rand(0, 6), 0], 7);
@@ -1103,7 +1103,7 @@ export function addStump(b: Batch, x: number, z: number, o: PropOpts = {}): Coll
     [0, k.rand(0, 6), 0],
   );
   k.put(disc(k.scene, 0.36, 0.03, { color: "woodLight" }, 14), [0, 0.54, 0]);
-  k.put(torus(k.scene, 0.2, 0.025, { color: "#e3bf94" }, 14), [0, 0.565, 0], ZERO, [1, 0.3, 1]);
+  k.put(torus(k.scene, 0.2, 0.03, { color: "#d9ab7c" }, 14), [0, 0.575, 0], ZERO, [1, 0.35, 1]);
   k.ball(0.04, [0, 0.57, 0], "#e3bf94", undefined, 4);
   for (let i = 0; i < 4; i++) {
     const a = (i / 4) * TAU + k.rand(-0.3, 0.3);

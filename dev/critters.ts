@@ -35,7 +35,7 @@ const stripDt = +(q.get("dt") ?? "0.08");
 if (only && strip > 0) {
   for (let i = 0; i < strip; i++) {
     const m = buildCritter(scene, only, variants[variants.length - 1]);
-    m.root.position.set(-(i - (strip - 1) / 2) * 0.75, 0, 0);
+    m.root.position.set((i - (strip - 1) / 2) * 0.75, 0, 0);
     critters.push({ m, st: { speed: anim === "walk" ? 1 : 0, sleeping: anim === "sleep", excited: anim === "excited" }, off: i * stripDt });
   }
 }
@@ -59,7 +59,7 @@ const far = q.get("far") === "1";
 const cam = new ArcRotateCamera("cam", Math.PI / 2, 1.2, 8.5, new Vector3(0, 0.35, -0.55), scene);
 if (only && strip > 0) {
   cam.target.set(0, critters[0].m.height * 0.45, 0);
-  cam.radius = strip * 0.75 * 1.05;
+  cam.radius = strip * 0.75 * 0.62;
   cam.beta = 1.38;
 } else if (only) {
   cam.target.set(0, critters[0].m.height * 0.5, 0);

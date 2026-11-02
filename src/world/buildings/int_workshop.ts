@@ -174,6 +174,24 @@ export function buildWorkshop(scene: Scene, origin: Vector3): InteriorDef {
   ctx.spot("blueprint", BP[0] - 0.1, 0, BP[2] - 0.95);
   ctx.spot("item_blueprint", BP[0], 1.1, BP[2]);
 
+  // ---- rag rug + paint cans ----
+  k.rug(1.9, 12, [0.4, 0.005, -0.3], "#a8e2c4", { key: "fluffy", scale: [1.15, 1, 0.9], thick: 0.06 });
+  k.rug(1.35, 10, [0.4, 0.07, -0.3], "#fff3b0", { key: "flat", scale: [1.15, 1, 0.9], thick: 0.06 });
+  const cans: [number, number, string][] = [
+    [-0.15, 2.45, "#f47a9a"],
+    [0.3, 2.65, "#8fc3ea"],
+    [0.1, 2.15, "#ffe066"],
+  ];
+  for (const [cx, cz, c] of cans) {
+    k.cyl(0.36, 0.17, 0.17, [cx, 0, cz], "#d9d4e3", { bevel: 0.03 });
+    k.disc(0.15, 0.03, [cx, 0.36, cz], c);
+    k.revolve((a) => {
+      const d = Math.max(0, Math.sin(a * 3)) * 0.12;
+      return [[0.172, 0.37], [0.18, 0.36], [0.18, 0.26 - d], [0.172, 0.25 - d], [0.15, 0.3]];
+    }, [cx, 0, cz], c, { segA: 24 });
+  }
+  ctx.circle(0.1, 2.4, 0.45);
+
   // ---- sawhorse with plank (centre) ----
   sawhorse(k, [0.6, 0, 0.5], 0.2);
   sawhorse(k, [0.6, 0, -0.9], 0.2);

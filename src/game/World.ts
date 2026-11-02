@@ -22,6 +22,7 @@ import {
   addFountain,
   addBridge,
   addCaveMouth,
+  addCliff,
   addGate,
   makeGrassField,
   makeMotes,
@@ -271,6 +272,30 @@ export class Overworld {
     // cave mouth
     const cm = addCaveMouth(this.chunk(LOC.caveMouth.x, LOC.caveMouth.z).main, LOC.caveMouth.x, LOC.caveMouth.z, 0, { y: heightAt(LOC.caveMouth.x, LOC.caveMouth.z - 2) });
     this.col(cm.colliders);
+    this.col(
+      addCliff(
+        this.chunk(LOC.caveMouth.x, LOC.caveMouth.z).main,
+        [
+          [-62, 108],
+          [-54, 116],
+          [-47.5, 118.5],
+        ],
+        6.5,
+        { y: heightAt(LOC.caveMouth.x, LOC.caveMouth.z - 2), seed: 11 },
+      ),
+    );
+    this.col(
+      addCliff(
+        this.chunk(LOC.caveMouth.x, LOC.caveMouth.z).main,
+        [
+          [-38.5, 118.5],
+          [-32, 116],
+          [-24, 108],
+        ],
+        6.5,
+        { y: heightAt(LOC.caveMouth.x, LOC.caveMouth.z - 2), seed: 12 },
+      ),
+    );
     this.caveEntrance = cm.entrance.clone();
     this.reserve(LOC.caveMouth.x, LOC.caveMouth.z, 6);
     this.interacts.push({

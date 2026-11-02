@@ -11,12 +11,12 @@
  * Two PointLights (pool + garden) are parented to `root`, so `root.setEnabled(false)` turns them off.
  */
 import { Mesh, MeshBuilder, PointLight, TransformNode, Vector3, VertexBuffer, Color3, type Scene } from "@babylonjs/core";
-import { Batch, finishMesh, lathe, scallopRug } from "../render/Shapes";
+import { Batch, finishMesh, lathe, scallopRug, disc } from "../render/Shapes";
 import { col, mixCol, jitterCol, rng } from "../render/Palette";
 import { toonMat } from "../render/Toon";
 import type { StageLighting } from "../render/Stage";
 import type { Collider, InteriorDef } from "../core/types";
-import { elb, addCrystal, addGlowShroom, addBridge, addRock, addLilyPad, addMushroom, addFlowerPatch, makeMotes, linkBatches, petals } from "./props";
+import { elb, addBush, addCrystal, addGlowShroom, addBridge, addRock, addLilyPad, addMushroom, addFlowerPatch, makeMotes, linkBatches, petals } from "./props";
 
 export const CAVE_LIGHT: StageLighting = {
   sky: "#b3a3ea",
@@ -121,7 +121,7 @@ export function buildCave(scene: Scene, origin: Vector3): InteriorDef {
 
   // ------------------------------------------------------------------ crystals & light pools
   const crystalSpots: [number, number, "lavender" | "pink" | "sky" | "mint", number][] = [
-    [-15.6, -1.2, "lavender", 1.45],
+    [-15.6, 0.1, "lavender", 1.35],
     [-8.9, -6.9, "pink", 1.0],
     [-16.4, 4.6, "sky", 1.15],
     [-11.4, 1.6, "mint", 0.75],
@@ -158,7 +158,7 @@ export function buildCave(scene: Scene, origin: Vector3): InteriorDef {
   const bigShrooms: [number, number, string, string][] = [
     [16.4, -5.4, "#c8fff0", "#62d6b0"],
     [11.0, 4.4, "#e2f3ff", "#7cbcf0"],
-    [-17.0, -3.6, "#ffe2f2", "#ee8fc0"],
+    [-16.1, -3.0, "#ffe2f2", "#ee8fc0"],
   ];
   for (const [x, z, c] of bigShrooms) lightPools.push([x, z, col(c), 3.2]);
 
@@ -229,11 +229,19 @@ export function buildCave(scene: Scene, origin: Vector3): InteriorDef {
       // keep the tunnel mouth open to the daylight
       if (lz < -14 && Math.abs(lx) < 2.0 + (-14 - lz) * 0.9) continue;
       const [dx, dzz] = grad(lx, lz); // toward the floor
-      // walls between camera (south) and floor are kept low so they never hide the player
+      // line-of-sight cap: the follow camera looks north at ~36° elevation, so a wall standing
+      // dN metres south of walkable floor may only be ~0.6 + 0.7·dN tall before it hides the player
+      let dN = 99;
+      for (let q = 0.4; q <= 7; q += 0.5) {
+        if (sdf(lx, lz + q) > 0.2) {
+          dN = q;
+          break;
+        }
+      }
       const camSide = Math.max(0, Math.min(1, (dzz + 0.15) / 0.8));
       const far = d < -3.2;
       if (far && r() < 0.45) continue;
-      const tall = (2.4 + Math.min(2.2, -d * 0.55)) * (1 - camSide * 0.78) + rand(-0.3, 0.4);
+      const tall = Math.min((2.4 + Math.min(2.2, -d * 0.55)) * (1 - camSide * 0.5) + rand(-0.3, 0.4), 0.6 + 0.7 * dN + rand(-0.1, 0.2));
       const rad = (far ? rand(1.2, 1.7) : rand(0.75, 1.3)) * (1 - camSide * 0.2);
       const t = Math.min(1, (-d - 0.3) / 4);
       const top = Color3.Lerp(jitterCol(pick(rockTops), 0.03, r), rockFarTop, t);
@@ -433,10 +441,19 @@ export function buildCave(scene: Scene, origin: Vector3): InteriorDef {
 
   // ------------------------------------------------------------------ pool, rim, bridge, lily pads
   {
-    const wm = scallopRug(scene, 1, 18, { color: "#7fd3ee", bottom: "#5ab6d8" }, 0.05);
-    wm.scaling.set(POOL.rx * 0.99, 1, POOL.rz * 0.99);
-    wm.position.set(ox + POOL.x, oy - 0.04, oz + POOL.z);
+    const wm = disc(scene, 1, 0.06, { color: "#86d6ef" }, 40);
+    wm.scaling.set(POOL.rx * 1.0, 1, POOL.rz * 1.02);
+    wm.position.set(ox + POOL.x, oy - 0.05, oz + POOL.z);
     water.add(wm);
+    // soft glints
+    for (let i = 0; i < 9; i++) {
+      const gx = rand(-POOL.rx * 0.75, POOL.rx * 0.75);
+      if (Math.abs(gx) < 1.2) continue;
+      const half = POOL.rz * Math.sqrt(Math.max(0, 1 - (gx / POOL.rx) ** 2)) * 0.6;
+      const g = elb(scene, rand(0.25, 0.5), 0.01, rand(0.05, 0.08), { color: "#e8fbff" }, 5);
+      g.position.set(ox + gx, oy + 0.02, oz + POOL.z + rand(-half, half));
+      water.add(g);
+    }
     // rim pebbles
     const nR = 46;
     for (let i = 0; i < nR; i++) {
@@ -474,12 +491,12 @@ export function buildCave(scene: Scene, origin: Vector3): InteriorDef {
   // ------------------------------------------------------------------ treasure dais & lantern nook
   {
     const [tx, tz] = SPOTS.treasure;
-    const rug = scallopRug(scene, 1.25, 12, { color: "#ffd9ec", bottom: "#f0a8cc" }, 0.05);
+    const rug = scallopRug(scene, 1.3, 12, { color: "#f4a9cc", bottom: "#d886ae" }, 0.05);
     rug.position.set(ox + tx, oy + 0.005, oz + tz);
-    shroom.add(rug);
-    const inner = scallopRug(scene, 0.85, 10, { color: "#fff0f7" }, 0.06);
+    main.add(rug);
+    const inner = scallopRug(scene, 0.9, 10, { color: "#ffd6e8" }, 0.07);
     inner.position.set(ox + tx, oy + 0.01, oz + tz);
-    shroom.add(inner);
+    main.add(inner);
     for (let i = 0; i < 8; i++) {
       const a = (i / 8) * Math.PI * 2;
       const st = petals(scene, 0.12, 5, { color: "#fff4b8", bottom: "#ffd56b" }, 0.05, 0.45);
@@ -506,9 +523,8 @@ export function buildCave(scene: Scene, origin: Vector3): InteriorDef {
   // daylight mouth: a little grass & flowers creeping in, low rocks framing the opening
   addFlowerPatch(main, ox - 1.9, oz - 16.3, 0.8, { y: oy, palette: ["white", "butter", "pink"], density: 5 });
   addFlowerPatch(main, ox + 2.0, oz - 16.6, 0.7, { y: oy, palette: ["white", "butter", "lilac"], density: 5 });
-  for (const [x, z] of [[-2.4, -15.2], [2.5, -15.0], [-3.1, -17.4], [3.3, -17.6]] as [number, number][]) {
-    const g = elb(scene, rand(0.35, 0.5), 0.14, rand(0.3, 0.4), { color: "#b6e59a", bottom: "#86c97a" }, 6);
-    main.add(place(g, ox + x, oy + 0.04, oz + z));
+  for (const [x, z, s] of [[-2.5, -15.2, 0.55], [2.6, -15.0, 0.5], [-3.2, -17.4, 0.7], [3.4, -17.6, 0.65]] as [number, number, number][]) {
+    addBush(main, ox + x, oz + z, { y: oy, scale: s, flowers: s > 0.6 });
   }
 
   // ------------------------------------------------------------------ build batches

@@ -43,7 +43,7 @@ export const OUTDOOR_LIGHT: StageLighting = {
   sunI: 0.95,
   sunDir: [-0.55, -1, 0.45],
   fog: "#f4dff0",
-  fogDensity: 0.0065,
+  fogDensity: 0.0042,
   clear: "#cfe6fb",
   skyTop: "#a9d4f5",
   skyHorizon: "#fbe0ef",
@@ -222,8 +222,8 @@ export class Stage {
     p.imageProcessingEnabled = true;
     const ip = p.imageProcessing;
     ip.toneMappingEnabled = false;
-    ip.contrast = 1.06;
-    ip.exposure = 1.04;
+    ip.contrast = 1.12;
+    ip.exposure = 1.02;
     ip.vignetteEnabled = true;
     ip.vignetteWeight = 1.6;
     ip.vignetteStretch = 0.4;
@@ -231,7 +231,7 @@ export class Stage {
     ip.vignetteBlendMode = ImageProcessingConfiguration.VIGNETTEMODE_MULTIPLY;
     ip.colorCurvesEnabled = true;
     const cc = ip.colorCurves!;
-    cc.globalSaturation = 12;
+    cc.globalSaturation = 16;
     cc.shadowsHue = 280;
     cc.shadowsDensity = 18;
     cc.shadowsSaturation = 30;

@@ -157,9 +157,16 @@ export function buildBuildable(scene: Scene, id: BuildableId, x: number, z: numb
     }
     case "cottage": {
       b.add(softBox(scene, 3.6, 2.4, 3.0, { pos: [0, 1.2, 0], color: "#ffe1ec", bottom: "#f6c3d4" }, 0.25));
-      b.add(cone(scene, 1.9, 2.5, { pos: [0, 2.3, 0], scale: [1, 1, 0.9], color: "skyDeep", bottom: "#a8cdee" }, 4));
-      b.add(scallopRug(scene, 2.3, 12, { pos: [0, 2.32, 0], color: "sky" }, 0.12));
-      b.add(ball(scene, 0.18, { pos: [0, 4.25, 0], color: "butter" }, 8));
+      // pitched storybook roof: two soft slabs meeting at a ridge, scalloped eaves, chimney
+      for (const side of [-1, 1]) {
+        b.add(softBox(scene, 4.3, 0.32, 2.35, { pos: [0, 3.05, side * 0.82], rot: [side * 0.62, 0, 0], color: "#a9d3f2", bottom: "skyDeep" }, 0.14));
+        for (let i = 0; i < 9; i++) b.add(ball(scene, 0.2, { pos: [-1.95 + i * 0.49, 2.38, side * 1.72], color: "white" }, 8));
+      }
+      b.add(softCyl(scene, 4.4, 0.2, 0.2, { pos: [-2.2, 3.72, 0], rot: [0, 0, -Math.PI / 2], color: "white" }, 0.08, 10));
+      b.add(softBox(scene, 0.5, 1.0, 0.5, { pos: [1.1, 3.8, 0.7], color: "#f6c3d4", bottom: "pinkDeep" }, 0.1));
+      b.add(softBox(scene, 0.62, 0.16, 0.62, { pos: [1.1, 4.32, 0.7], color: "white" }, 0.06));
+      b.add(blob(scene, 0.22, 0.2, 0.08, { pos: [-0.12, 2.0, -1.53], color: "pinkDeep" }, 8));
+      b.add(blob(scene, 0.22, 0.2, 0.08, { pos: [0.12, 2.0, -1.53], color: "pinkDeep" }, 8));
       // round door
       b.add(softBox(scene, 0.95, 1.4, 0.2, { pos: [0, 0.7, -1.45], color: "woodLight", bottom: "wood" }, 0.3));
       b.add(ball(scene, 0.07, { pos: [0.28, 0.75, -1.58], color: "butterDeep" }, 6));

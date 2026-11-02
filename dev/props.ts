@@ -60,6 +60,7 @@ async function main() {
     stage.shadowFocus = cam.target.clone();
     if (def.update) updaters.push(def.update);
     if (qs.get("debug")) debugCave(def);
+    console.log("cave verts", scene.meshes.reduce((a, m) => a + (m as Mesh).getTotalVertices(), 0), "meshes", scene.meshes.length);
   } else if (qs.get("stats")) {
     stats();
   } else {
@@ -275,7 +276,7 @@ function buildMeadow() {
     scene,
     { minX: -40, maxX: 40, minZ: -30, maxZ: 25 },
     num("grass", 0.9),
-    (x, z) => onPath(x, z) || inPond(x * 0.95 + pondC.x * 0.05, z) || Math.hypot(x, z - 2.5) < 2.7 || z > 16.5,
+    (x, z) => onPath(x, z) || Math.hypot((x - pondC.x) / 1.25, z - pondC.z) < pondC.r + 0.2 || Math.hypot(x, z - 2.5) < 2.7 || z > 16.5 || (x < -12 && z > 11),
     7,
   );
   const ff = makeMotes(scene, { minX: -20, maxX: 20, minZ: -8, maxZ: 12 }, 30, { y0: 0.5, y1: 2.5, seed: 3 });

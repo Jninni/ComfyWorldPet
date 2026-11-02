@@ -411,6 +411,13 @@ export function faceShapes(scene: Scene, f: FaceSpec, mode: FaceMode): Mesh[] {
         [yaw - s * dy * 0.7, pit + dp * 1.95],
       ];
       out.push(...arcOn(scene, E, b, line * 0.85, eyeCol));
+      if (s > 0) {
+        // a little teardrop under one eye
+        const tp = surf(E, yaw + dy * 0.75, pit - dp * 1.25, f.eyeW * 0.25);
+        out.push(blobM(scene, [f.eyeW * 0.42, f.eyeH * 0.55, f.eyeW * 0.3], tp.p, "#a6dcff", rotZTo(tp.n), undefined, 6));
+        const th = surf(E, yaw + dy * 0.68, pit - dp * 1.12, f.eyeW * 0.45);
+        out.push(ballM(scene, f.eyeW * 0.09, th.p, "#ffffff", undefined, 4));
+      }
     }
     // blush
     if (f.cheekR) {

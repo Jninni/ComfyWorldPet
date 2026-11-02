@@ -482,26 +482,25 @@ function drawMap(g: Game): HTMLCanvasElement {
   const Z = (z: number) => (WORLD.maxZ - z) * S;
   c.fillStyle = "#cfe9b5";
   c.fillRect(0, 0, cv.width, cv.height);
-  // hills
-  const img = c.getImageData(0, 0, cv.width, cv.height);
-  for (let py = 0; py < cv.height; py += 2)
-    for (let px = 0; px < cv.width; px += 2) {
-      const w = walkField(WORLD.minX + px / S, WORLD.maxZ - py / S);
-      if (w > 1.0) {
-        for (const [dx, dy] of [
-          [0, 0],
-          [1, 0],
-          [0, 1],
-          [1, 1],
-        ]) {
-          const i = ((py + dy) * cv.width + px + dx) * 4;
-          img.data[i] = 150;
-          img.data[i + 1] = 200;
-          img.data[i + 2] = 140;
-        }
-      }
+  // hills: sample at quarter resolution, then upscale smoothly for soft coastlines
+  const sm = document.createElement("canvas");
+  sm.width = Math.ceil(cv.width / 4);
+  sm.height = Math.ceil(cv.height / 4);
+  const sc = sm.getContext("2d")!;
+  const img = sc.createImageData(sm.width, sm.height);
+  for (let py = 0; py < sm.height; py++)
+    for (let px = 0; px < sm.width; px++) {
+      const w = walkField(WORLD.minX + (px * 4) / S, WORLD.maxZ - (py * 4) / S);
+      const i = (py * sm.width + px) * 4;
+      const hill = w > 1.0;
+      img.data[i] = hill ? 150 : 207;
+      img.data[i + 1] = hill ? 200 : 233;
+      img.data[i + 2] = hill ? 140 : 181;
+      img.data[i + 3] = 255;
     }
-  c.putImageData(img, 0, 0);
+  sc.putImageData(img, 0, 0);
+  c.imageSmoothingEnabled = true;
+  c.drawImage(sm, 0, 0, cv.width, cv.height);
   c.fillStyle = "#9fd7f0";
   c.beginPath();
   c.ellipse(X(POND.cx), Z(POND.cz), POND.rx * S, POND.rz * S, 0, 0, Math.PI * 2);
@@ -528,7 +527,7 @@ function drawMap(g: Game): HTMLCanvasElement {
   label("Whisper Meadow", 0, 86);
   label("Mossy Woods", -82, 30);
   label("Sparkle Pond", 98, 50);
-  label("Critter Haven", 40, -24);
+  label("Critter Haven", 44, -27);
   label("Crystal Cave", -44, 124);
   // houses
   c.font = "26px sans-serif";

@@ -70,6 +70,8 @@ class InputImpl {
   private listeners: PressCb[] = [];
   private stickLatch = { x: 0, y: 0 };
   private keysHeld = new Set<string>();
+  /** presses seen since the last update, so taps shorter than a frame still register */
+  private tapped = new Set<Btn>();
 
   constructor() {
     window.addEventListener("keydown", (e) => {
@@ -79,7 +81,10 @@ class InputImpl {
       if (e.target instanceof HTMLInputElement) return;
       this.lastDevice = "keyboard";
       this.keysHeld.add(e.code);
-      if (!e.repeat) this.keyDown.add(b);
+      if (!e.repeat) {
+        this.keyDown.add(b);
+        this.tapped.add(b);
+      }
       if (["Space", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.code)) e.preventDefault();
     });
     window.addEventListener("keyup", (e) => {
@@ -134,7 +139,8 @@ class InputImpl {
     else if (Math.abs(sy) < 0.3) this.stickLatch.y = 0;
 
     this.prev = this.cur;
-    this.cur = new Set<Btn>([...this.keyDown, ...this.padDown, ...this.touchDown]);
+    this.cur = new Set<Btn>([...this.keyDown, ...this.padDown, ...this.touchDown, ...this.tapped]);
+    this.tapped.clear();
     if (this.stickLatch.x > 0) this.cur.add("right");
     if (this.stickLatch.x < 0) this.cur.add("left");
     if (this.stickLatch.y > 0) this.cur.add("up");
@@ -198,6 +204,7 @@ class InputImpl {
   setTouchButton(b: Btn, down: boolean) {
     if (down) {
       this.touchDown.add(b);
+      this.tapped.add(b);
       this.lastDevice = "touch";
     } else this.touchDown.delete(b);
   }

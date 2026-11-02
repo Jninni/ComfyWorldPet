@@ -76,7 +76,7 @@ if (interior) {
   paint(g, "grass");
   finishMesh(g, scene, { outline: false, castShadow: false });
   const ids = single ? [single] : BUILDING_IDS;
-  const spacing = 10;
+  const spacing = 11;
   ids.forEach((id, i) => {
     const x = (i - (ids.length - 1) / 2) * spacing;
     const rot = +(qs.get("rot") ?? 0);
@@ -90,7 +90,7 @@ if (interior) {
   cam.target = new Vector3(0, 2.6, 0);
   cam.alpha = +(qs.get("alpha") ?? -Math.PI / 2 + 0.15);
   cam.beta = +(qs.get("beta") ?? 1.12);
-  cam.radius = +(qs.get("radius") ?? (single ? 17 : 52));
+  cam.radius = +(qs.get("radius") ?? (single ? 19 : 58));
   stage.shadowFocus.set(0, 0, 0);
   stage.setShadowArea(single ? 10 : 34);
 }
