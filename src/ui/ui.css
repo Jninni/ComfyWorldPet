@@ -1093,3 +1093,12 @@ body.touch .hint-pill {
 .hint-pill.out {
   animation: toastOut 0.35s ease-in both;
 }
+
+body.dlg-open .touch-ui,
+body.dlg-open .hint-pill,
+body.dlg-open .party-strip {
+  visibility: hidden;
+}
+body.touch .dialogue {
+  width: min(860px, calc(100vw - 32px));
+}

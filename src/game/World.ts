@@ -57,7 +57,7 @@ export interface Pickup {
   visible: () => boolean;
 }
 
-const CHUNK = 48;
+const CHUNK = 40;
 
 export class Overworld {
   root: TransformNode;
@@ -199,7 +199,7 @@ export class Overworld {
       for (const sx of [-1, 1]) {
         const x = b.x + sx * 4.2,
           z = b.z - 3.2;
-        if (!nearPath(x, z, 0.5)) addFlowerPatch(this.chunk(x, z).main, x, z, 1.2, { seed: Math.floor(x * 7 + z), y: heightAt(x, z) });
+        if (!nearPath(x, z, 0.5)) addFlowerPatch(this.chunk(x, z).main, x, z, 1.0, { seed: Math.floor(x * 7 + z), y: heightAt(x, z), density: 0.8 });
       }
     }
     // gates (north / west / east) + fences filling the chokepoints
@@ -232,10 +232,10 @@ export class Overworld {
       this.col(addTree(this.chunk(x, z).main, x, z, kinds[i % kinds.length], { seed: i * 13 + 1, y: y(x, z), scale: 0.85 + R() * 0.3 }));
     });
     scatter("village", 30, 1.0, (x, z, i) => this.col(addBush(this.chunk(x, z).main, x, z, { flowers: i % 2 === 0, seed: i + 300, y: y(x, z) })));
-    scatter("village", 24, 1.2, (x, z, i) => addFlowerPatch(this.chunk(x, z).main, x, z, 1.1 + R(), { seed: i + 500, y: y(x, z) }), 0.6);
+    scatter("village", 14, 1.2, (x, z, i) => addFlowerPatch(this.chunk(x, z).main, x, z, 0.9 + R() * 0.6, { seed: i + 500, y: y(x, z), density: 0.7 }), 0.6);
     // meadow: flowers everywhere, blossom trees, rocks
     scatter("meadow", 22, 2.0, (x, z, i) => this.col(addTree(this.chunk(x, z).main, x, z, i % 3 === 0 ? "fruit" : "blossom", { seed: i * 7 + 900, y: y(x, z), scale: 0.9 + R() * 0.35 })));
-    scatter("meadow", 70, 1.2, (x, z, i) => addFlowerPatch(this.chunk(x, z).main, x, z, 1.4 + R() * 1.6, { seed: i + 1200, y: y(x, z), density: 1.2 }), 0.5);
+    scatter("meadow", 44, 1.2, (x, z, i) => addFlowerPatch(this.chunk(x, z).main, x, z, 1.3 + R() * 1.2, { seed: i + 1200, y: y(x, z), density: 0.75 }), 0.5);
     scatter("meadow", 18, 1.0, (x, z, i) => this.col(addBush(this.chunk(x, z).main, x, z, { flowers: true, seed: i + 1500, y: y(x, z) })));
     scatter("meadow", 14, 0.9, (x, z, i) => this.col(addRock(this.chunk(x, z).main, x, z, { seed: i + 1700, y: y(x, z), scale: 0.6 + R() * 0.6 })));
     // woods: dense trees, mushrooms, logs
@@ -266,7 +266,7 @@ export class Overworld {
     }
     scatter("pond", 16, 2.0, (x, z, i) => this.col(addTree(this.chunk(x, z).main, x, z, i % 2 ? "willow" : "round", { seed: i * 5 + 3200, y: y(x, z) })));
     scatter("pond", 14, 0.9, (x, z, i) => this.col(addRock(this.chunk(x, z).main, x, z, { seed: i + 3300, y: y(x, z), scale: 0.5 + R() * 0.6 })));
-    scatter("pond", 16, 1.1, (x, z, i) => addFlowerPatch(this.chunk(x, z).main, x, z, 1.2, { seed: i + 3400, y: y(x, z), palette: ["#bfe0f6", "#ffffff", "#cdb9f0"] }), 0.5);
+    scatter("pond", 10, 1.1, (x, z, i) => addFlowerPatch(this.chunk(x, z).main, x, z, 1.1, { seed: i + 3400, y: y(x, z), palette: ["#bfe0f6", "#ffffff", "#cdb9f0"], density: 0.8 }), 0.5);
     // a little fishing dock
     this.col(addBridge(this.chunk(POND.cx - POND.rx, POND.cz).main, POND.cx - POND.rx + 2.2, POND.cz - 4, 7, Math.PI / 2, { y: -0.1 }));
     // cave mouth
@@ -325,7 +325,8 @@ export class Overworld {
 
     /* ---------------- build chunk meshes ---------------- */
     for (const [, c] of this.chunks) {
-      const ms = c.build(null);
+      const lowQ = this.g.stage.quality === "low";
+      const ms = c.build(null, { main: lowQ ? { castShadow: false } : {}, leaves: { castShadow: false } });
       ms.forEach((m) => {
         m.parent = this.root;
         m.freezeWorldMatrix();
@@ -337,18 +338,18 @@ export class Overworld {
 
     /* ---------------- grass ---------------- */
     const density = q === "low" ? 0.18 : q === "medium" ? 0.32 : 0.5;
-    const grass = makeGrassField(
-      scene,
-      { minX: -70, maxX: 135, minZ: -35, maxZ: 125 },
-      density,
-      (x, z) => walkField(x, z) > 0.9 || nearPath(x, z, 0.3) || ellipseD(POND, x, z) < 1.12 || this.occupied.some((o) => o.r > 3 && Math.hypot(o.x - x, o.z - z) < o.r * 0.8),
-      77,
-      0.02,
-    );
-    grass.parent = this.root;
-    const grass2 = makeGrassField(scene, { minX: -125, maxX: -70, minZ: -30, maxZ: 100 }, density * 0.8, (x, z) => walkField(x, z) > 0.9 || nearPath(x, z, 0.3), 78, 0.02);
-    grass2.parent = this.root;
-
+    const exclude = (x: number, z: number) =>
+      walkField(x, z) > 0.9 || nearPath(x, z, 0.3) || ellipseD(POND, x, z) < 1.12 || this.occupied.some((o) => o.r > 3 && Math.hypot(o.x - x, o.z - z) < o.r * 0.8);
+    let gseed = 77;
+    for (let gx = -125; gx < 135; gx += 32)
+      for (let gz = -35; gz < 125; gz += 32) {
+        // skip cells that are entirely hills
+        let any = false;
+        for (let sx = 0; sx <= 4 && !any; sx++) for (let sz = 0; sz <= 4 && !any; sz++) any = walkField(gx + sx * 8, gz + sz * 8) < 0.9;
+        if (!any) continue;
+        const gm = makeGrassField(scene, { minX: gx, maxX: gx + 32, minZ: gz, maxZ: gz + 32 }, density, exclude, gseed++, 0.02);
+        gm.parent = this.root;
+      }
     // fireflies / pollen motes
     const motes: Motes[] = [
       makeMotes(scene, { minX: -40, maxX: 40, minZ: 45, maxZ: 115 }, q === "low" ? 30 : 70, { colors: ["#fff6c8", "#ffe0f0", "#ffffff"], seed: 3, accept: (x, z) => walkField(x, z) < 0.9 }),
@@ -530,58 +531,58 @@ export class Overworld {
   private buildBackdrop(R: () => number) {
     const scene = this.g.scene;
     const kinds: TreeKind[] = ["round", "pine", "blossom", "round"];
-    // purpose-built low-poly backdrop trees (hundreds of them are instanced on the hills)
-    const templates = kinds.map((k, i) => {
-      const b = new Batch(scene, "bk_" + k + i);
+    // purpose-built low-poly backdrop trees; built per spatial cell so frustum culling works
+    const makeTemplate = (k: TreeKind, i: number, cell: string) => {
+      const b = new Batch(scene, "bk_" + k + i + "_" + cell);
       const leafA = k === "blossom" ? "#ffc9dc" : k === "pine" ? "#7fc98a" : i === 3 ? "#a6dc8a" : "#93d47f";
       const leafB = k === "blossom" ? "#f39bbb" : k === "pine" ? "#4f9f68" : "#62b46f";
-      b.add(softCyl(scene, 1.6, 0.22, 0.32, { color: "woodDeep", bottom: "woodDark" }, 0.08, 7));
+      b.add(softCyl(scene, 1.6, 0.22, 0.32, { color: "woodDeep", bottom: "woodDark" }, 0.08, 6));
       if (k === "pine") {
-        b.add(cone(scene, 2.6, 1.7, { pos: [0, 1.2, 0], color: leafA, bottom: leafB }, 8));
-        b.add(cone(scene, 2.1, 1.3, { pos: [0, 2.6, 0], color: leafA, bottom: leafB }, 8));
-        b.add(cone(scene, 1.5, 0.85, { pos: [0, 3.8, 0], color: leafA, bottom: leafB }, 8));
+        b.add(cone(scene, 2.6, 1.7, { pos: [0, 1.2, 0], color: leafA, bottom: leafB }, 7));
+        b.add(cone(scene, 2.1, 1.3, { pos: [0, 2.6, 0], color: leafA, bottom: leafB }, 7));
+        b.add(cone(scene, 1.5, 0.85, { pos: [0, 3.8, 0], color: leafA, bottom: leafB }, 7));
       } else {
-        b.add(ball(scene, 1.5, { pos: [0, 2.9, 0], color: leafA, bottom: leafB }, 7));
-        b.add(ball(scene, 1.05, { pos: [0.95, 2.4, 0.2], color: leafA, bottom: leafB }, 6));
-        b.add(ball(scene, 1.0, { pos: [-0.9, 2.5, -0.3], color: leafA, bottom: leafB }, 6));
-        b.add(ball(scene, 0.9, { pos: [0.1, 3.9, -0.2], color: leafA, bottom: leafB }, 6));
+        b.add(ball(scene, 1.55, { pos: [0, 2.9, 0], color: leafA, bottom: leafB }, 5));
+        b.add(ball(scene, 1.1, { pos: [0.95, 2.35, 0.2], color: leafA, bottom: leafB }, 4));
+        b.add(ball(scene, 1.05, { pos: [-0.9, 2.45, -0.3], color: leafA, bottom: leafB }, 4));
       }
-      const m = b.build({ outline: 0.05 })!;
+      const m = b.build({ outline: 0.05, castShadow: false })!;
       m.parent = this.root;
-      return [m];
-    });
-    const mats: Matrix[][] = templates.map(() => []);
+      return m;
+    };
+    const cells = new Map<string, Matrix[][]>();
     const q = this.g.stage.quality;
-    const step = q === "low" ? 6 : 4.8;
+    const step = q === "low" ? 6.5 : 5.2;
+    const CELL = 40;
     for (let x = WORLD.minX + 2; x < WORLD.maxX - 2; x += step) {
       for (let z = WORLD.minZ + 2; z < WORLD.maxZ - 2; z += step) {
         const jx = x + (R() - 0.5) * step * 0.9,
           jz = z + (R() - 0.5) * step * 0.9;
         const w = walkField(jx, jz);
-        if (w < 0.98 || w > 2.4) continue;
+        if (w < 0.98 || w > 2.2) continue;
         // keep distant hills sparser
-        if (w > 1.7 && R() < 0.5) continue;
+        if (w > 1.6 && R() < 0.55) continue;
         if (Math.hypot(jx - LOC.caveMouth.x, jz - LOC.caveMouth.z) < 9) continue;
         const k = zoneAt(jx, jz) === "woods" ? (R() < 0.6 ? 1 : 0) : zoneAt(jx, jz) === "meadow" ? (R() < 0.4 ? 2 : 0) : Math.floor(R() * 4);
-        const s = 1.0 + R() * 0.8 + Math.min(0.6, (w - 1) * 0.6);
-        const m = Matrix.Compose(new Vector3(s, s, s), Quaternion.FromEulerAngles(0, R() * Math.PI * 2, 0), new Vector3(jx, heightAt(jx, jz) - 0.1, jz));
-        mats[k].push(m);
+        const sc = 1.0 + R() * 0.8 + Math.min(0.6, (w - 1) * 0.6);
+        const key = Math.floor(jx / CELL) + "," + Math.floor(jz / CELL);
+        let c = cells.get(key);
+        if (!c) cells.set(key, (c = kinds.map(() => [])));
+        c[k].push(Matrix.Compose(new Vector3(sc, sc, sc), Quaternion.FromEulerAngles(0, R() * Math.PI * 2, 0), new Vector3(jx, heightAt(jx, jz) - 0.1, jz)));
       }
     }
-    templates.forEach((meshes, i) => {
-      if (!mats[i].length) {
-        meshes.forEach((m) => m.setEnabled(false));
-        return;
-      }
-      const buf = new Float32Array(mats[i].length * 16);
-      mats[i].forEach((m, j) => m.copyToArray(buf, j * 16));
-      for (const m of meshes) {
+    for (const [key, perKind] of cells) {
+      perKind.forEach((mats, i) => {
+        if (!mats.length) return;
+        const m = makeTemplate(kinds[i], i, key);
+        const buf = new Float32Array(mats.length * 16);
+        mats.forEach((mm, j) => mm.copyToArray(buf, j * 16));
         m.thinInstanceSetBuffer("matrix", buf, 16, true);
         m.thinInstanceRefreshBoundingInfo(false);
         m.isPickable = false;
-        m.alwaysSelectAsActiveMesh = false;
-      }
-    });
+        m.freezeWorldMatrix();
+      });
+    }
   }
 
   private buildNodeTemplates() {

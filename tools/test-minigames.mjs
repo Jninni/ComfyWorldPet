@@ -233,18 +233,32 @@ async function failPaths() {
   console.log(`${ok ? "PASS" : "FAIL"} title→not now (click): ${JSON.stringify(res)}`);
   if (!ok) failures++;
   // Let's go via click on a second launch, then cleanup check
-  await page.evaluate(() => window.__play("melodyMatch"));
+  await page.evaluate(() => {
+    void window.__play("melodyMatch");
+  });
   await waitPhase(page, "title");
   await page.waitForTimeout(700);
   await page.click(".mg-btn-go");
   await waitPhase(page, "play");
-  // tap bells with real pointer clicks
-  const pos = await page.evaluate(() => {
-    const w = innerWidth;
-    return { w };
+  // tap the bells with real pointer clicks once it's the player's turn
+  await page.waitForFunction(() => window.__minigame?.state?.phase === "input");
+  const seq = await page.evaluate(() => window.__minigame.state.seq);
+  const W = 1180, H = 820;
+  const hudB = await page.evaluate(() => {
+    const h = document.querySelector(".mg-hud");
+    return h.offsetTop + h.offsetHeight;
   });
-  void pos;
-  console.log(`PASS click "Let's go!" starts play`);
+  // mirror melodyMatch geo(): centre of each bell
+  const t0 = hudB + 6, b = H - 10, l = 12, r = W - 12;
+  const t = t0 + Math.min(64, Math.max(34, (b - t0) * 0.08));
+  const cx = (l + r) / 2, cy = (t + b) / 2, Dy = (b - t) * 0.335, Dx = Math.min((r - l) * 0.3, Dy * 2.2);
+  const at = { up: [cx, cy - Dy], right: [cx + Dx, cy], down: [cx, cy + Dy], left: [cx - Dx, cy] };
+  for (const d of seq) {
+    await page.mouse.click(at[d][0], at[d][1]);
+    await page.waitForTimeout(150);
+  }
+  await page.waitForFunction(() => window.__minigame?.state?.round >= 1);
+  console.log(`PASS click "Let's go!" + pointer taps on bells complete round 1`);
   await page.close();
 }
 

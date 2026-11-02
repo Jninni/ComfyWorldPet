@@ -296,6 +296,7 @@ export class UI {
   /* ---------------- dialogue ---------------- */
   async say(lines: Line[], onLine?: (l: Line, i: number) => void): Promise<number> {
     this.dialogueOpen = true;
+    document.body.classList.add("dlg-open");
     let result = -1;
     const box = h(".dialogue.panel");
     const who = h(".who");
@@ -326,6 +327,7 @@ export class UI {
     } finally {
       box.remove();
       this.dialogueOpen = false;
+      if (!this.root.querySelector(".dialogue")) document.body.classList.remove("dlg-open");
       input.consumeAll();
     }
     return result;

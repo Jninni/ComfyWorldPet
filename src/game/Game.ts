@@ -1,4 +1,4 @@
-import { ArcRotateCamera, Vector3, Matrix, TransformNode, type Mesh } from "@babylonjs/core";
+import { ArcRotateCamera, Vector3, Matrix, TransformNode, SceneInstrumentation, type Mesh } from "@babylonjs/core";
 import { Stage, OUTDOOR_LIGHT, type StageLighting } from "../render/Stage";
 import { FX } from "../render/FX";
 import { UI } from "../ui/UI";
@@ -1270,6 +1270,44 @@ export class Game {
     this.syncWorldToState();
     this.refreshQuestUI();
     this.mode = "play";
+  }
+
+  /** Debug: walk up to an NPC (in whatever location) and talk, as a player would. */
+  async debugTalk(id: NpcId) {
+    const n = this.npcs.get(id)!;
+    if (this.current.id !== n.location) await this.goTo(n.location, n.location === "overworld" ? { x: n.pos.x, z: n.pos.z - 2, rot: 0 } : undefined, false);
+    this.player.place(n.pos.x, n.pos.y, n.pos.z - 1.8, 0);
+    await this.runInteract({ id: "npc_" + id, pos: n.pos, r: 3, label: "Talk", run: () => this.talkTo(n) });
+    return { main: this.state.quests.main?.stage, quests: Object.fromEntries(Object.entries(this.state.quests).map(([k, v]) => [k, v.done ? "done" : v.stage])) };
+  }
+
+  /** Debug: befriend the nearest wild critter of a species in the current location. */
+  async debugBefriend(species?: string) {
+    const w = this.current.wild.find((x) => x.state !== "hidden" && (!species || x.species === species));
+    if (!w) return "none";
+    this.player.place(w.pos.x, w.pos.y, w.pos.z - 1.6, 0);
+    await this.runInteract({ id: "wild", pos: w.pos, r: 3, label: "", run: () => this.befriend(w) });
+    return this.state.critters.length;
+  }
+
+  /** Debug: rendering stats for perf budgeting. */
+  stats() {
+    const inst = (this as unknown as { _inst?: SceneInstrumentation })._inst ?? new SceneInstrumentation(this.scene);
+    (this as unknown as { _inst?: SceneInstrumentation })._inst = inst;
+    inst.captureFrameTime = true;
+    return new Promise((r) =>
+      setTimeout(
+        () =>
+          r({
+            drawCalls: inst.drawCallsCounter.current,
+            activeMeshes: this.scene.getActiveMeshes().length,
+            activeIndices: this.scene.getActiveIndices(),
+            frameMs: inst.frameTimeCounter.lastSecAverage,
+            fps: this.stage.engine.getFps(),
+          }),
+        1500,
+      ),
+    );
   }
 
   /** Debug helper for automated tests. */
