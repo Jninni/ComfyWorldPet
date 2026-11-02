@@ -36,6 +36,8 @@ export interface RoomStyle {
   mat: ColorLike;
   matAccent: ColorLike;
   seed?: number;
+  /** skip the default heart doormat (the room draws its own exit mat at [0, 0, Z0 + 0.62]) */
+  customMat?: boolean;
 }
 
 export function onBack(k: Kit, x: number, y: number, fn: () => void, out = 0) {
@@ -154,7 +156,7 @@ export function roomShell(k: Kit, st: RoomStyle) {
   k.box(T + 0.3, H + 0.1, 0.34, [X0 - T / 2, H / 2 - 0.03, Z0 - 0.06], st.border, { key: "shell", r: 0.15, steps: 3, bottom: st.borderDeep });
 
   // ---------- doormat (exit) ----------
-  doormat(k, [0, 0, Z0 + 0.62], st.mat, st.matAccent);
+  if (!st.customMat) doormat(k, [0, 0, Z0 + 0.62], st.mat, st.matAccent);
 }
 
 function motifAt(k: Kit, m: NonNullable<RoomStyle["motif"]>, p: V3, rotY: number, c: ColorLike) {

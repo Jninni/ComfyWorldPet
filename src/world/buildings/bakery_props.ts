@@ -3,7 +3,7 @@
  * chalkboard pictures, copper pans… All author into the Kit's current frame (bottom-centre at p).
  */
 import { Kit, circlePts, roundRectPts, heartPts, type V3, type P2 } from "./kit";
-import { PI, heart, cakeRound, petalPts } from "./props";
+import { PI, cakeRound, petalPts } from "./props";
 import type { ColorLike } from "../../render/Shapes";
 import { mixCol, rng } from "../../render/Palette";
 
@@ -20,7 +20,7 @@ export const SPRINKLES: ColorLike[] = ["#f47a9a", "#7fd6cf", "#ffe066", "#b48ce6
 export function loaf(k: Kit, p: V3, rotY = 0, s = 1, key = "main", crust: ColorLike = CRUST) {
   k.at(k.frame(p, rotY, s), () => {
     k.blob(0.22, 0.13, 0.13, [0, 0.11, 0], crust, { bottom: CRUST_DEEP, key, seg: 8 });
-    for (const x of [-0.1, 0, 0.1]) k.blob(0.028, 0.03, 0.105, [x, 0.21 - Math.abs(x) * 0.08, 0], CRUST_LIGHT, { rot: [0, 0.45, 0], key, seg: 5 });
+    for (const x of [-0.1, 0, 0.1]) k.blob(0.028, 0.03, 0.105, [x, 0.21 - Math.abs(x) * 0.08, 0], CRUST_LIGHT, { rot: [0, 0.45, 0], key, seg: 4 });
   });
 }
 
@@ -36,11 +36,11 @@ export function boule(k: Kit, p: V3, s = 1, key = "main") {
 /** baguette standing along local +Y from p (use rot to tilt / lay down) */
 export function baguette(k: Kit, p: V3, rot: V3, len = 0.75, s = 1, key = "main") {
   k.at(k.frame(p, rot, s), () => {
-    k.capsule(len, 0.055, [0, len / 2, 0], CRUST, { key, seg: 8 });
-    const n = Math.max(2, Math.round(len / 0.16));
+    k.capsule(len, 0.055, [0, len / 2, 0], CRUST, { key, seg: 6 });
+    const n = Math.max(2, Math.round(len / 0.22));
     for (let i = 0; i < n; i++) {
-      const y = 0.12 + (i * (len - 0.24)) / Math.max(1, n - 1);
-      k.blob(0.028, 0.06, 0.03, [0, y, -0.035], CRUST_LIGHT, { rot: [0, 0, 0.7], key, seg: 5 });
+      const y = 0.14 + (i * (len - 0.28)) / Math.max(1, n - 1);
+      k.blob(0.028, 0.06, 0.03, [0, y, -0.035], CRUST_LIGHT, { rot: [0, 0, 0.7], key, seg: 3 });
     }
   });
 }
@@ -57,7 +57,7 @@ export function croissant(k: Kit, p: V3, rotY = 0, s = 1, key = "main") {
     ];
     segs.forEach(([a, r], i) => {
       const R = 0.12;
-      k.blob(r * 0.85, r * 0.9, r * 1.3, [Math.sin(a) * R, r * 0.85, -Math.cos(a) * R + 0.06], i % 2 ? CRUST_LIGHT : CRUST, { rot: [0, PI - a, 0], key, seg: 7, bottom: CRUST_DEEP });
+      k.blob(r * 0.85, r * 0.9, r * 1.3, [Math.sin(a) * R, r * 0.85, -Math.cos(a) * R + 0.06], i % 2 ? CRUST_LIGHT : CRUST, { rot: [0, PI - a, 0], key, seg: 5, bottom: CRUST_DEEP });
     });
   });
 }
@@ -68,10 +68,10 @@ export function bun(k: Kit, p: V3, s = 1, key = "main", sesame = false, color: C
     k.blob(0.11, 0.075, 0.11, [0, 0.065, 0], color, { bottom: CRUST_LIGHT, key, seg: 7 });
     if (sesame) {
       const r = rng(Math.floor((p[0] * 13 + p[2] * 7) * 100) & 0xffff);
-      for (let i = 0; i < 6; i++) {
-        const a = r() * PI * 2,
-          d = 0.02 + r() * 0.05;
-        k.blob(0.012, 0.008, 0.02, [Math.cos(a) * d, 0.137 - d * 0.25, Math.sin(a) * d], "#fff6e6", { rot: [0, a, 0], key, seg: 4 });
+      for (let i = 0; i < 4; i++) {
+        const a = (i / 4) * PI * 2 + r(),
+          d = 0.03 + r() * 0.035;
+        k.blob(0.014, 0.01, 0.022, [Math.cos(a) * d, 0.137 - d * 0.25, Math.sin(a) * d], "#fff6e6", { rot: [0, a, 0], key, seg: 3 });
       }
     }
   });
@@ -89,7 +89,7 @@ export function donut(k: Kit, p: V3, glaze: ColorLike, s = 1, key = "main", spri
     if (sprinkles)
       for (let i = 0; i < 6; i++) {
         const a = (i / 6) * PI * 2 + 0.3;
-        k.box(0.035, 0.012, 0.012, [Math.cos(a) * 0.08, 0.066, Math.sin(a) * 0.08], SPRINKLES[i % SPRINKLES.length], { rot: [0, a * 1.7, 0], key, r: 0.005, steps: 1 });
+        k.plainBox(0.035, 0.014, 0.014, [Math.cos(a) * 0.08, 0.068, Math.sin(a) * 0.08], SPRINKLES[i % SPRINKLES.length], { rot: [0, a * 1.7, 0], key });
       }
   });
 }
@@ -110,12 +110,12 @@ export function cupcake(k: Kit, p: V3, frost: ColorLike, wrap: ColorLike = "#f7a
       },
       [0, 0, 0],
       wrap,
-      { key, segA: 24 },
+      { key, segA: 16 },
     );
-    k.blob(0.095, 0.05, 0.095, [0, 0.13, 0], frost, { key, seg: 8 });
-    k.blob(0.07, 0.045, 0.07, [0, 0.18, 0], frost, { key, seg: 8 });
-    k.blob(0.04, 0.04, 0.04, [0, 0.225, 0], frost, { key, seg: 7 });
-    k.ball(0.028, [0, 0.27, 0], top, { key, seg: 6 });
+    k.blob(0.095, 0.05, 0.095, [0, 0.13, 0], frost, { key, seg: 6 });
+    k.blob(0.07, 0.045, 0.07, [0, 0.18, 0], frost, { key, seg: 6 });
+    k.blob(0.04, 0.04, 0.04, [0, 0.225, 0], frost, { key, seg: 5 });
+    k.ball(0.028, [0, 0.27, 0], top, { key, seg: 4 });
   });
 }
 
@@ -124,10 +124,10 @@ export function flowerCake(k: Kit, p: V3, r: number, h: number, frosting: ColorL
   cakeRound(k, p, r, h, sponge, frosting, { berries: 0 });
   const top = p[1] + h + 0.03;
   // rosettes round the rim
-  const n = Math.max(6, Math.round((r * PI * 2) / 0.09));
+  const n = Math.max(6, Math.round((r * PI * 2) / 0.13));
   for (let i = 0; i < n; i++) {
     const a = (i / n) * PI * 2;
-    k.ball(0.035 * (r / 0.2) ** 0.4, [p[0] + Math.cos(a) * r * 0.86, top + 0.01, p[2] + Math.sin(a) * r * 0.86], mixCol(frosting as string, "#ffffff", 0.35), { seg: 6 });
+    k.ball(0.042 * (r / 0.2) ** 0.4, [p[0] + Math.cos(a) * r * 0.86, top + 0.01, p[2] + Math.sin(a) * r * 0.86], mixCol(frosting as string, "#ffffff", 0.35), { seg: 4 });
   }
   k.puff(petalPts(r * 0.55, 5, 30), 0.05, [p[0], top + 0.04, p[2]], petal, { rot: [PI / 2, 0, 0], bevel: 0.022 });
   k.ball(r * 0.17, [p[0], top + 0.07, p[2]], centre, { seg: 7, scale: [1, 0.6, 1] });
@@ -145,6 +145,26 @@ export function macaronPile(k: Kit, p: V3, cols: ColorLike[], s = 1) {
       k.cyl(0.014, 0.038, 0.038, [Math.cos(a) * rr, y + 0.022, Math.sin(a) * rr], "cream", { key: "fine", seg: 10 });
       k.blob(0.045, 0.018, 0.045, [Math.cos(a) * rr, y + 0.046, Math.sin(a) * rr], c, { key: "fine", seg: 7 });
     });
+  });
+}
+
+/** low-poly puffy heart (cheaper than props.heart for small/repeated use) */
+export function heartLo(k: Kit, p: V3, size: number, color: ColorLike, depth = size * 0.3, o: { rot?: V3; key?: string } = {}) {
+  return k.puff(heartPts(size, 18), depth, p, color, { bevel: depth * 0.45, bulge: depth * 0.15, rot: o.rot, key: o.key, steps: 2 });
+}
+
+/** cheap slatted wooden crate (open top), p = floor centre */
+export function breadCrate(k: Kit, p: V3, w: number, h: number, d: number, wood: ColorLike = "#e8c49a", rotY = 0) {
+  k.at(k.frame(p, rotY), () => {
+    k.box(w - 0.06, h * 0.92, d - 0.06, [0, h * 0.46, 0], "#c99a6b", { r: 0.03, steps: 1 });
+    for (let i = 0; i < 2; i++) {
+      const y = h * (0.27 + i * 0.46);
+      for (const s of [-1, 1]) {
+        k.box(w, h * 0.32, 0.05, [0, y, s * (d / 2 - 0.02)], wood, { r: 0.02, steps: 1 });
+        k.box(0.05, h * 0.32, d, [s * (w / 2 - 0.02), y, 0], wood, { r: 0.02, steps: 1 });
+      }
+    }
+    for (const sx of [-1, 1]) for (const sz of [-1, 1]) k.box(0.08, h, 0.08, [sx * (w / 2 - 0.03), h / 2, sz * (d / 2 - 0.03)], "#f2d4ae", { r: 0.03, steps: 1 });
   });
 }
 
@@ -217,15 +237,15 @@ export function hangingPan(k: Kit, p: V3, r = 0.2, s = 1) {
 /** sack of flour slumped on the floor */
 export function flourSack(k: Kit, p: V3, rotY = 0, s = 1, stamp: ColorLike = "#f7a8c0") {
   k.at(k.frame(p, rotY, s), () => {
-    k.blob(0.3, 0.32, 0.24, [0, 0.3, 0], "#f6eedf", { bottom: "#e6d6bd", seg: 9 });
-    k.blob(0.2, 0.12, 0.16, [0, 0.6, 0], "#f6eedf", { seg: 8 });
+    k.blob(0.3, 0.32, 0.24, [0, 0.3, 0], "#f6eedf", { bottom: "#e6d6bd", seg: 8 });
+    k.blob(0.2, 0.12, 0.16, [0, 0.6, 0], "#f6eedf", { seg: 6 });
     k.torus(0.1, 0.04, [0, 0.66, 0], "#c99a6b", { seg: 10, key: "fine" });
     for (let i = 0; i < 4; i++) {
       const a = (i / 4) * PI * 2 + 0.4;
-      k.blob(0.06, 0.08, 0.03, [Math.cos(a) * 0.06, 0.74, Math.sin(a) * 0.06], "#f6eedf", { rot: [Math.sin(a) * 0.5, 0, -Math.cos(a) * 0.5], seg: 5 });
+      k.blob(0.06, 0.08, 0.03, [Math.cos(a) * 0.06, 0.74, Math.sin(a) * 0.06], "#f6eedf", { rot: [Math.sin(a) * 0.5, 0, -Math.cos(a) * 0.5], seg: 4 });
     }
     // stamp: wheat-ish heart sitting proud of the sack face
-    heart(k, [0, 0.32, -0.27], 0.2, stamp, 0.04, { key: "fine" });
+    heartLo(k, [0, 0.32, -0.27], 0.2, stamp, 0.04, { key: "fine" });
   });
 }
 
@@ -250,7 +270,7 @@ export function cafeTable(k: Kit, p: V3, top: ColorLike, s = 1, metal: ColorLike
       },
       [0, 0, 0],
       top,
-      { segA: 40, bottom: mixCol(top as string, "#7a5a70", 0.12) },
+      { segA: 30, bottom: mixCol(top as string, "#7a5a70", 0.12) },
     );
   });
   return p[1] + (h + 0.01) * s;
@@ -265,11 +285,11 @@ export function cafeChair(k: Kit, p: V3, rotY: number, color: ColorLike, cushion
       [-0.17, 0.17],
       [0.17, 0.17],
     ])
-      k.rod(0.46, 0.022, [x * 1.08, 0.23, z * 1.08], metal, { rot: [-z * 0.25, 0, x * 0.25], seg: 6 });
-    k.cyl(0.07, 0.24, 0.23, [0, 0.42, 0], color, { bevel: 0.03, seg: 16 });
-    k.blob(0.2, 0.04, 0.2, [0, 0.5, 0], cushionC, { seg: 8 });
-    for (const x of [-0.13, 0.13]) k.rod(0.36, 0.02, [x, 0.66, 0.2], metal, { rot: [-0.12, 0, 0], seg: 5 });
-    k.at(k.frame([0, 0.8, 0.24], [-0.12, PI, 0]), () => heart(k, [0, -0.02, 0], 0.42, color, 0.07, { bulge: 0.02 }));
+      k.rod(0.46, 0.022, [x * 1.08, 0.23, z * 1.08], metal, { rot: [-z * 0.25, 0, x * 0.25], seg: 5 });
+    k.cyl(0.07, 0.24, 0.23, [0, 0.42, 0], color, { bevel: 0.03, seg: 12 });
+    k.blob(0.2, 0.04, 0.2, [0, 0.5, 0], cushionC, { seg: 6 });
+    for (const x of [-0.13, 0.13]) k.rod(0.36, 0.02, [x, 0.66, 0.2], metal, { rot: [-0.12, 0, 0], seg: 4 });
+    k.at(k.frame([0, 0.8, 0.24], [-0.12, PI, 0]), () => heartLo(k, [0, -0.02, 0], 0.42, color, 0.07));
   });
 }
 
@@ -365,7 +385,7 @@ export function chalkIcon(k: Kit, kind: "croissant" | "cupcake" | "donut" | "cup
         k.decal(circlePts(0.035, 12), [0.09, -0.01, 0], "#fffdf8", { key, t });
         k.decal(circlePts(0.018, 10), [0.09, -0.01, -0.003], "#5b6a70", { key, t });
         for (const x of [-0.03, 0.03]) k.decal(circlePts(0.015, 8, 0.035), [x, 0.09, 0], "#e6e0f0", { key, t });
-        heart(k, [0, -0.02, -0.01], 0.06, "#f47a9a", 0.01, { key });
+        heartLo(k, [0, -0.02, -0.01], 0.06, "#f47a9a", 0.01, { key });
         break;
       }
       case "loaf": {
@@ -394,7 +414,7 @@ export function chalkIcon(k: Kit, kind: "croissant" | "cupcake" | "donut" | "cup
 export function pawMat(k: Kit, p: V3, color: ColorLike, paw: ColorLike, w = 1.3, d = 0.8) {
   k.puff(roundRectPts(w, d, 0.22), 0.06, [p[0], p[1] + 0.03, p[2]], color, { rot: [PI / 2, 0, 0], bevel: 0.03, key: "flat" });
   pawPrint(k, [p[0], p[1] + 0.062, p[2] + 0.02], 0.5 * (d / 0.8), paw, "flat");
-  for (let i = 0; i < 9; i++) for (const s of [-1, 1]) k.box(0.04, 0.02, 0.12, [p[0] - w * 0.4 + (i * w * 0.8) / 8, p[1] + 0.012, p[2] + s * (d / 2 + 0.03)], paw, { key: "flat", r: 0.008, steps: 1 });
+  for (let i = 0; i < 9; i++) for (const s of [-1, 1]) k.plainBox(0.04, 0.02, 0.12, [p[0] - w * 0.4 + (i * w * 0.8) / 8, p[1] + 0.012, p[2] + s * (d / 2 + 0.03)], paw, { key: "flat" });
 }
 
 /** flat paw print (pad + 4 toe beans) lying on XZ, toes toward +Z */

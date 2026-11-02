@@ -376,7 +376,7 @@ export class Game {
           L.interacts.push({
             id: "in_table_" + i,
             pos: t,
-            r: 1.4,
+            r: 2.1,
             label: "Have a snack",
             enabled: () => !!this.state.skills.cooking,
             run: () => this.cafeSnack(),

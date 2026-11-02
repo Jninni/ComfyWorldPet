@@ -140,7 +140,7 @@ export class Overworld {
       this.exteriors.push(ext);
       this.col(ext.colliders);
       this.doors.set(id, ext.door.clone());
-      this.reserve(b.x, b.z, id === "bakery" ? 7 : 5.5);
+      this.reserve(b.x, b.z, id === "bakery" ? 7.6 : 5.5);
       this.reserve(ext.door.x, ext.door.z - 1.5, 2.5);
       this.interacts.push({
         id: "door_" + id,
@@ -170,7 +170,7 @@ export class Overworld {
         this.interacts.push({
           id: "cafe_table_" + i,
           pos: t,
-          r: 1.5,
+          r: 2.1,
           label: "Have a snack",
           enabled: () => !!this.g.state.skills.cooking,
           run: () => this.g.cafeSnack(),

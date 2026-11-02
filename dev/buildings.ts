@@ -83,8 +83,9 @@ if (interior) {
     const def = buildExterior(scene, id, new Vector3(x, 0, 0), rot);
     if (def.update) updates.push(def.update);
     if (debug) {
-      drawColliders(def.colliders);
+      drawColliders(def.colliders, 0.16); // above raised plinths/tiles
       marker(def.door, new Color3(0, 1, 0));
+      for (const p of Object.values(def.spots ?? {})) marker(p, new Color3(0, 0.4, 1), 0.1);
     }
   });
   cam.target = new Vector3(0, 2.6, 0);
