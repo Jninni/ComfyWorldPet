@@ -91,3 +91,24 @@ src/render/*              toon shader, shapes, stage, particles
 dev/*.html                standalone showcase pages for each module
 tools/*.mjs               headless screenshot / play-test / audio test scripts
 ```
+
+## Testing
+
+Everything was play-tested headlessly (Chromium + SwiftShader) from scripts:
+
+```bash
+tools/snapbuild.sh                                   # production snapshot → /tmp/claude-0/dist (retries mid-edit files)
+npx vite preview --outDir /tmp/claude-0/dist --port 4173 &
+node tools/play.mjs tools/shots/run steps.json 1280 800 "http://localhost:4173/?q=low"
+node tools/test-minigames.mjs                        # plays all four minigames to a win
+node tools/test-audio.mjs --no-wav                   # renders every track/sfx offline, checks levels & clipping
+```
+
+`play.mjs` takes a JSON list of steps (`wait`, `key`, `click`, `eval`, `shot`). The game exposes debug hooks on
+`window.__game` for scripted runs: `debugMain(stage)`, `debugTeleport(where, x, z)`, `debugTalk(npc)`,
+`debugBefriend(species)`, `debugAutoWin`, `stats()` (draw calls / active indices / fps). The full story —
+tutorial → Mochi → gates → 3 friends → Lantern → Star Crystal → Friendship Festival — plus all six side quests
+and village building complete end-to-end in an automated run.
+
+Each content module also has a standalone showcase page under `dev/` (`critters.html`, `characters.html`,
+`buildings.html?interior=teahouse`, `props.html?cave=1`, `minigames.html`, `audio.html`).
