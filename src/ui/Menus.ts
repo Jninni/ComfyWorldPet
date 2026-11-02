@@ -75,7 +75,7 @@ export function showTitle(g: Game): Promise<"new" | "continue"> {
       nav.focusFirst();
     };
     // first gesture unlocks audio and shows the menu
-    const hint = h(".tap-hint", null, "Tap to start");
+    const hint = h(".tap-hint", null, "Tap, click or press Ⓐ to start");
     btns.append(hint);
     const first = () => {
       window.removeEventListener("pointerdown", first);

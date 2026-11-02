@@ -52,7 +52,8 @@ sky pastels, thick soft plum outlines, chunky rounded shapes, scalloped rugs, he
 | Back | ↩ button | Ⓑ | Esc |
 | Bag (quests, journal, party, map, style, settings) | 🐾 button / 🎒 | Ⓧ / Start | Q / Tab / P |
 | Journal | — | Ⓨ | J |
-| Zoom | Pinch | — | Mouse wheel |
+| Rotate camera | Drag with one finger (right side) | Right stick or LB / RB | Drag with the mouse, or `[` `]` / `,` `.` |
+| Zoom | Pinch | Right stick up/down | Mouse wheel |
 
 Menus are fully navigable with the d-pad / stick (spatial focus), LB/RB switch tabs.
 

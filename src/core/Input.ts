@@ -27,10 +27,19 @@ const KEYMAP: Record<string, Btn> = {
   KeyM: "start",
   BracketLeft: "lb",
   BracketRight: "rb",
+  Comma: "lb",
+  Period: "rb",
   ArrowUp: "up",
   ArrowDown: "down",
   ArrowLeft: "left",
   ArrowRight: "right",
+  // Android sometimes delivers controller buttons as key events
+  GameButtonA: "a",
+  GameButtonB: "b",
+  GameButtonX: "x",
+  GameButtonY: "y",
+  GameButtonStart: "start",
+  NumpadEnter: "a",
   KeyW: "up",
   KeyS: "down",
   KeyA: "left",
@@ -57,6 +66,8 @@ type PressCb = (b: Btn) => void;
 class InputImpl {
   /** analog movement, x right, y up (forward). length <= 1 */
   move = { x: 0, y: 0 };
+  /** right stick (camera), x right, y up. */
+  look = { x: 0, y: 0 };
   lastDevice: Device = "keyboard";
   enabled = true;
 
@@ -72,10 +83,77 @@ class InputImpl {
   private keysHeld = new Set<string>();
   /** presses seen since the last update, so taps shorter than a frame still register */
   private tapped = new Set<Btn>();
+  /** pad buttons seen down by the fast poller since the last frame */
+  private padLatched = new Set<Btn>();
+  private connectListeners: ((id: string, connected: boolean) => void)[] = [];
+
+  /** Notified when a controller connects/disconnects (for a friendly toast). */
+  onConnect(cb: (id: string, connected: boolean) => void) {
+    this.connectListeners.push(cb);
+  }
+
+  /** Read every connected pad; supports the standard layout plus common non-standard Android layouts. */
+  private lookTmp = { x: 0, y: 0 };
+  private readPads(out: Set<Btn>): { x: number; y: number } {
+    this.lookTmp.x = this.lookTmp.y = 0;
+    let px = 0,
+      py = 0;
+    let pads: (Gamepad | null)[] = [];
+    try {
+      pads = navigator.getGamepads ? [...navigator.getGamepads()] : [];
+    } catch {
+      pads = [];
+    }
+    for (const p of pads) {
+      if (!p || !p.connected) continue;
+      p.buttons.forEach((btn, i) => {
+        const b = PADMAP[i];
+        if (b && (btn.pressed || btn.value > 0.5)) out.add(b);
+      });
+      if (p.mapping === "standard" || p.axes.length >= 4) {
+        const rx = p.axes[2] ?? 0,
+          ry = p.axes[3] ?? 0;
+        if (Math.hypot(rx, ry) > 0.2) {
+          this.lookTmp.x = rx;
+          this.lookTmp.y = -ry;
+        }
+      }
+      const ax = p.axes[0] ?? 0,
+        ay = p.axes[1] ?? 0;
+      if (Math.hypot(ax, ay) > 0.18) {
+        px = ax;
+        py = -ay;
+      }
+      if (p.mapping !== "standard") {
+        // many non-standard pads put the d-pad on axes 6/7 or a single "hat" axis 9
+        const hx = p.axes[6] ?? 0,
+          hy = p.axes[7] ?? 0;
+        if (hx < -0.5) out.add("left");
+        if (hx > 0.5) out.add("right");
+        if (hy < -0.5) out.add("up");
+        if (hy > 0.5) out.add("down");
+        const hat = p.axes[9];
+        if (hat !== undefined && hat >= -1.01 && hat <= 1.01 && Math.abs(hat) > 0.05) {
+          const k = Math.round((hat + 1) * 3.5); // 0 up, 1 up-right, 2 right … 7 up-left
+          if (k === 7 || k === 0 || k === 1) out.add("up");
+          if (k >= 1 && k <= 3) out.add("right");
+          if (k >= 3 && k <= 5) out.add("down");
+          if (k >= 5 && k <= 7) out.add("left");
+        }
+      }
+    }
+    return { x: px, y: py };
+  }
+
+  private pollPads() {
+    const s = new Set<Btn>();
+    this.readPads(s);
+    for (const b of s) this.padLatched.add(b);
+  }
 
   constructor() {
     window.addEventListener("keydown", (e) => {
-      const b = KEYMAP[e.code];
+      const b = KEYMAP[e.code] ?? KEYMAP[e.key];
       if (e.code === "Tab") e.preventDefault();
       if (!b) return;
       if (e.target instanceof HTMLInputElement) return;
@@ -89,7 +167,7 @@ class InputImpl {
     });
     window.addEventListener("keyup", (e) => {
       this.keysHeld.delete(e.code);
-      const b = KEYMAP[e.code];
+      const b = KEYMAP[e.code] ?? KEYMAP[e.key];
       if (!b) return;
       // only release if no other key maps to the same button
       for (const k of this.keysHeld) if (KEYMAP[k] === b) return;
@@ -102,6 +180,15 @@ class InputImpl {
     window.addEventListener("pointerdown", (e) => {
       if (e.pointerType === "touch") this.lastDevice = "touch";
     });
+    // Poll pads ~120x/s in between frames so short taps aren't lost when the frame rate dips.
+    setInterval(() => this.pollPads(), 8);
+    window.addEventListener("gamepadconnected", (e) => {
+      this.lastDevice = "gamepad";
+      for (const cb of this.connectListeners) cb((e as GamepadEvent).gamepad.id, true);
+    });
+    window.addEventListener("gamepaddisconnected", (e) => {
+      for (const cb of this.connectListeners) cb((e as GamepadEvent).gamepad.id, false);
+    });
     const loop = () => {
       this.update();
       requestAnimationFrame(loop);
@@ -112,22 +199,13 @@ class InputImpl {
   /** Called once per animation frame (automatically). */
   update() {
     this.padDown.clear();
-    let px = 0,
-      py = 0;
-    const pads = navigator.getGamepads ? navigator.getGamepads() : [];
-    for (const p of pads) {
-      if (!p || !p.connected) continue;
-      p.buttons.forEach((btn, i) => {
-        const b = PADMAP[i];
-        if (b && (btn.pressed || btn.value > 0.5)) this.padDown.add(b);
-      });
-      const ax = p.axes[0] ?? 0,
-        ay = p.axes[1] ?? 0;
-      if (Math.hypot(ax, ay) > 0.18) {
-        px = ax;
-        py = -ay;
-      }
-    }
+    const stick = this.readPads(this.padDown);
+    this.look.x = this.lookTmp.x;
+    this.look.y = this.lookTmp.y;
+    const px = stick.x,
+      py = stick.y;
+    for (const b of this.padLatched) this.padDown.add(b);
+    this.padLatched.clear();
     if (this.padDown.size || Math.hypot(px, py) > 0.3) this.lastDevice = "gamepad";
 
     // stick → dpad edges for menus

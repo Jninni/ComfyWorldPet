@@ -20,7 +20,7 @@ import type { NpcId, PlayerLook } from "../entities/characterModels";
 import { NPC_INFO } from "../entities/characterModels";
 import { zoneAt, LOC, heightAt } from "../world/layout";
 import { openPauseMenu, openBuildMenu, showTitle, showCreator } from "../ui/Menus";
-import { h } from "../ui/dom";
+import { h, portrait } from "../ui/dom";
 
 export interface Interact {
   id: string;
@@ -73,6 +73,8 @@ export class Game {
   private camBeta = CAM_BETA;
   private focusOverride: Vector3 | null = null;
   private zoomMul = 1;
+  /** player-controlled camera rotation (radians) around the target */
+  private camYaw = 0;
   private plotMeshes: (Mesh | null)[] = [];
   private builtThings: (BuiltThing | null)[] = [];
   private markerLabels = new Map<NpcId, () => void>();
@@ -99,6 +101,10 @@ export class Game {
     this.fx = new FX(scene);
     this.story = new Story(this);
     this.ui.onMenu = () => this.openMenu();
+    input.onConnect((id, on) => {
+      const name = /xbox|xinput/i.test(id) ? "Xbox controller" : /playstation|dualsense|dualshock|054c/i.test(id) ? "PlayStation controller" : "Controller";
+      this.ui.toast(on ? `${name} connected!` : `${name} disconnected`, "🎮", on ? "var(--mint)" : "var(--pink)");
+    });
     this.ui.root.append(this.guide);
     // wheel / pinch zoom
     canvas.addEventListener(
@@ -128,6 +134,8 @@ export class Game {
     });
     canvas.addEventListener("pointermove", (e) => {
       if (!pts.has(e.pointerId)) return;
+      const prev = pts.get(e.pointerId)!;
+      if (pts.size === 1 && this.mode === "play") this.camYaw += (e.clientX - prev.x) * 0.006;
       pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
       if (pts.size === 2 && d0 > 0) {
         const [a, b] = [...pts.values()];
@@ -423,6 +431,7 @@ export class Game {
       p = new Vector3(LOC.spawnStart.x, heightAt(LOC.spawnStart.x, LOC.spawnStart.z), LOC.spawnStart.z);
       rot = Math.PI;
     }
+    this.camYaw = 0;
     this.player.place(p.x, p.y, p.z, rot);
     this.followers.forEach((f, i) => f.place(p.add(new Vector3(-Math.sin(rot) * (i + 1) * 1.2, 0, -Math.cos(rot) * (i + 1) * 1.2)), rot));
     this.snapCamera();
@@ -534,6 +543,14 @@ export class Game {
     if (playing && input.pressed("start")) this.openMenu();
     if (playing && input.pressed("y")) openPauseMenu(this, "critters");
 
+    if (playing) {
+      // rotate: right stick, LB/RB, [ ] or , . keys (drag / two-finger handled in setupPinch)
+      let turn = input.look.x * 2.4;
+      if (input.down("lb")) turn -= 1.8;
+      if (input.down("rb")) turn += 1.8;
+      this.camYaw += turn * dt;
+      if (Math.abs(input.look.y) > 0.2) this.zoomMul = Math.max(0.65, Math.min(1.35, this.zoomMul * (1 + input.look.y * dt * 0.9)));
+    }
     this.updateCamera(dt, L);
     this.updateGuide(playing);
     if (this.hintEl && playing) {
@@ -694,13 +711,16 @@ export class Game {
       const t = f.target.clone();
       t.x += (pp.x - f.target.x) * 0.18;
       t.z += (pp.z - f.target.z) * 0.12;
-      return { target: t, alpha: f.alpha, beta: f.beta, radius: f.radius * this.zoomMulClamped(0.9, 1.1) };
+      // dioramas only have back/left walls, so keep the turn gentle
+      this.camYaw = Math.max(-0.45, Math.min(0.45, this.camYaw));
+      return { target: t, alpha: f.alpha + this.camYaw, beta: f.beta, radius: f.radius * this.zoomMulClamped(0.9, 1.1) };
     }
-    const t = new Vector3(pp.x, pp.y + 1.1, pp.z + 1.0);
+    const fwd = -Math.PI / 2 + this.camYaw;
+    const t = new Vector3(pp.x - Math.cos(fwd) * 1.0, pp.y + 1.1, pp.z - Math.sin(fwd) * 1.0);
     if (f?.follow) {
-      return { target: t, alpha: f.alpha, beta: f.beta, radius: f.radius * this.zoomMul };
+      return { target: t, alpha: f.alpha + this.camYaw, beta: f.beta, radius: f.radius * this.zoomMul };
     }
-    return { target: t, alpha: -Math.PI / 2, beta: CAM_BETA, radius: CAM_RADIUS * this.zoomMul };
+    return { target: t, alpha: -Math.PI / 2 + this.camYaw, beta: CAM_BETA, radius: CAM_RADIUS * this.zoomMul };
   }
 
   private zoomMulClamped(a: number, b: number) {
@@ -993,7 +1013,7 @@ export class Game {
     for (const c of this.state.critters.filter((x) => x.inParty)) {
       const info = SPECIES[c.species];
       const face = h(".party-face", { "--c": info.color, title: c.name });
-      import("../ui/dom").then(({ portrait }) => face.append(portrait(c.species, info.color, 96)));
+      face.append(portrait(c.species, info.color, 96));
       strip.append(face);
     }
   }
