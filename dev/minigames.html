@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<title>Minigames sandbox</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; font-family: Fredoka, system-ui, sans-serif; color: #4a3a52; }
+  /* fake "3D world" behind the overlay */
+  body {
+    background:
+      radial-gradient(60px 40px at 18% 62%, #6fbf73 60%, transparent 62%),
+      radial-gradient(90px 70px at 22% 56%, #86c97a 60%, transparent 62%),
+      radial-gradient(80px 60px at 78% 60%, #86c97a 60%, transparent 62%),
+      radial-gradient(50px 50px at 70% 64%, #f8b9cb 60%, transparent 62%),
+      radial-gradient(140px 60px at 50% 70%, #f1dcb6 60%, transparent 62%),
+      radial-gradient(1200px 400px at 50% 110%, #a9de8c 60%, transparent 61%),
+      radial-gradient(900px 300px at 10% 95%, #c4ec9f 60%, transparent 61%),
+      radial-gradient(160px 100px at 80% 20%, #fff 50%, transparent 52%),
+      radial-gradient(120px 80px at 25% 18%, #fff 50%, transparent 52%),
+      linear-gradient(#bfe0f6, #e7f4fb 60%, #a9de8c 60%);
+  }
+  #panel {
+    position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+    background: #fff6e6; border: 4px solid #4a3a52; border-radius: 24px; padding: 18px 22px;
+    box-shadow: 0 8px 0 rgba(74,58,82,.3); display: grid; gap: 12px; min-width: 300px;
+  }
+  #panel h1 { margin: 0; font-size: 26px; text-align: center; }
+  #panel .row { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
+  #panel button { font: 600 18px Fredoka, sans-serif; padding: 12px 16px; border-radius: 16px; border: 3px solid #4a3a52; background: #f8b9cb; color: #4a3a52; cursor: pointer; min-height: 56px; }
+  #panel select, #panel input { font: 16px Fredoka, sans-serif; padding: 6px 8px; border-radius: 10px; border: 2px solid #4a3a52; }
+  #log { font-size: 14px; max-height: 120px; overflow: auto; white-space: pre-wrap; }
+</style>
+</head>
+<body>
+  <div id="panel">
+    <h1>Minigames</h1>
+    <div class="row">
+      <label>Species <select id="species"></select></label>
+      <label>Diff <select id="diff"><option>1</option><option>2</option><option>3</option></select></label>
+    </div>
+    <div class="row">
+      <label>Name <input id="name" value="Puffbun" size="10"></label>
+      <label>Color <input id="color" type="color" value="#f8b9cb"></label>
+    </div>
+    <div class="row" id="games"></div>
+    <div id="log"></div>
+  </div>
+  <script type="module" src="./minigames.ts"></script>
+</body>
+</html>
