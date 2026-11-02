@@ -1350,7 +1350,7 @@ export class Game {
     this.ui.setHudVisible(false);
     await this.ui.fade(true, 600);
     // gather everyone around the plaza
-    const ring = [..."mayor granny flora stitch hoot pip bramble marina".split(" ")] as NpcId[];
+    const ring = [..."mayor granny flora stitch hoot pip bramble marina mocha".split(" ")] as NpcId[];
     const saved = new Map<NpcId, { loc: string; pos: Vector3; rot: number }>();
     ring.forEach((id, i) => {
       const n = this.npcs.get(id)!;

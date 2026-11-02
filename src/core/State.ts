@@ -8,6 +8,10 @@ export interface PlayerLookState {
   hair: string;
   outfit: string;
   hat: string;
+  style?: string;
+  outfit2?: string;
+  accessory?: string;
+  accessoryColor?: string;
 }
 
 export interface OwnedCritter {

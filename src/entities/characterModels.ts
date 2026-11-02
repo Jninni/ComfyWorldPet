@@ -379,9 +379,7 @@ function outerProfile(ps: [number, number][][]): [number, number][] {
 function playerParts(kit: Kit, L: Required<PlayerLook>, nodes: PlayerNodes) {
   const s = kit.scene;
   const skin = L.skin,
-    hair = L.hair,
-    outfit = L.outfit,
-    acc = L.outfit2;
+    hair = L.hair;
   const H = P_HEAD;
   const hoodUp = L.style === "hoodie" && L.hat === "none";
 
