@@ -45,6 +45,7 @@ export const SPECIES_MINIGAME: Record<SpeciesId, MinigameId> = {
   fennix: "danceAlong",
   hoglet: "treatToss",
   shroomy: "bubblePop",
+  redpanda: "treatToss",
   ribbit: "bubblePop",
   duckling: "bubblePop",
   glowbat: "melodyMatch",

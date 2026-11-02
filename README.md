@@ -69,7 +69,19 @@ Menus are fully navigable with the d-pad / stick (spatial focus), LB/RB switch t
   and **6 side quests** with hat rewards.
 * **Village building**: gather Twigs, Petals, Pebbles, Berries and Crystals; build 8 kinds of cozy things on
   6 plots in Critter Haven. Party critters have talents (bonus gathering, easier minigames, light in caves).
-* Autosave (localStorage) + nap in your bed to save.
+* **Cozy life systems**
+  * **Gardening** — four garden beds beside your cottage: plant wheat, carrots, strawberries or pumpkins, water to
+    halve the grow time, harvest when they sparkle. Crops keep growing in real time while you're away.
+  * **Cooking** at Mocha's Bakery & Café oven: 7 recipes from garden crops, honey (meadow beehives), apples
+    (fruit baskets), mushrooms (woods) and berries. Foods either power **you** up (Zoomies speed, Lucky rare
+    critters, Cozy Belly easier minigames) or are **treats to share** with your party (friendship hearts, extra
+    gathering, presents). Five hearts makes a critter your best friend and doubles its talent.
+  * **Café order board** — villagers post cravings; deliver baked goods for building materials.
+  * **Sewing** (taught by Stitch): sew overalls, dresses, hoodies, tunics, raincoats, scarves, bows, capes and
+    backpacks, dyed with flowers you collect (rose, sunflower, lavender, daisy, bluebell, poppy, mint — each grows
+    in its own area). Live preview on your character; everything you make lives in your wardrobe (Bag → Style).
+  * **Rufflepaw the red panda** and the *Pastry Thief* quest: follow the crumb trail from the bakery into Mossy Woods.
+* Autosave (localStorage) + nap in your bed to save. Saves from older versions upgrade automatically.
 
 ## Code map
 

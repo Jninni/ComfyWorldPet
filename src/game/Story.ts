@@ -3,6 +3,7 @@ import type { Line } from "../ui/UI";
 import type { NpcId } from "../entities/characterModels";
 import { NPC_INFO } from "../entities/characterModels";
 import { audio } from "../audio/Audio";
+import { SPECIES_IDS } from "../data/species";
 
 export interface QuestDef {
   id: string;
@@ -79,6 +80,37 @@ export const QUESTS: Record<string, QuestDef> = {
     color: "var(--sky)",
     stages: ["Collect 4 Pebbles", "Bring the Pebbles to Marina"],
   },
+  bakery: {
+    id: "bakery",
+    name: "Mocha's Baking Lessons",
+    giver: "mocha",
+    icon: "🥐",
+    color: "var(--butter)",
+    stages: [
+      "Plant wheat in your garden (next to your cottage)",
+      "Harvest your wheat when it's ready",
+      "Collect honey from a beehive in Whisper Meadow",
+      "Bake Critter Cookies in Mocha's oven",
+      "Show Mocha your cookies",
+    ],
+  },
+  thief: {
+    id: "thief",
+    name: "The Pastry Thief",
+    giver: "mocha",
+    icon: "🐾",
+    color: "var(--pink)",
+    stages: ["Follow the crumb trail", "Befriend the pastry thief in Mossy Woods", "Bring your new friend to meet Mocha"],
+    targets: { 0: 9 },
+  },
+  sewing: {
+    id: "sewing",
+    name: "Sewing Lessons",
+    giver: "stitch",
+    icon: "🧵",
+    color: "var(--lav)",
+    stages: ["Pick 3 dye flowers (any colours!)", "Bring the flowers to Stitch"],
+  },
   haven: {
     id: "haven",
     name: "Critter Haven",
@@ -150,7 +182,22 @@ export class Story {
     if (id === "tea" && q.stage === 0) t += ` (${Math.min(this.g.state.resources.berry, 3)}/3)`;
     if (id === "bouquet" && q.stage === 0) t += ` (${Math.min(this.g.state.resources.petal, 5)}/5)`;
     if (id === "pebbles" && q.stage === 0) t += ` (${Math.min(this.g.state.resources.pebble, 4)}/4)`;
+    if (id === "sewing" && q.stage === 0) t += ` (${Math.min(this.dyeCount(), 3)}/3)`;
     return t;
+  }
+
+  dyeCount() {
+    return Object.values(this.g.state.dyes).reduce((a, b) => a + (b ?? 0), 0);
+  }
+
+  onGarden(what: "plant" | "harvest", crop: string) {
+    if (crop !== "wheat" || !this.active("bakery")) return;
+    if (what === "plant" && this.stage("bakery") === 0) this.advance("bakery");
+    if (what === "harvest" && this.stage("bakery") === 1) this.advance("bakery");
+  }
+
+  onCook(food: string) {
+    if (food === "cookie" && this.active("bakery") && this.stage("bakery") === 3) this.advance("bakery");
   }
 
   /** Called whenever inventory/state changes, to auto-advance collect stages. */
@@ -163,6 +210,8 @@ export class Story {
     chk("bouquet", r.petal >= 5);
     chk("pebbles", r.pebble >= 4);
     if (this.active("yarn") && this.stage("yarn") === 0 && (this.g.state.keyItems.yarn ?? 0) >= 3) this.advance("yarn");
+    if (this.active("sewing") && this.stage("sewing") === 0 && this.dyeCount() >= 3) this.advance("sewing");
+    if (this.active("bakery") && this.stage("bakery") === 2 && (this.g.state.ingredients.honey ?? 0) >= 1) this.advance("bakery");
     if (this.active("haven") && this.stage("haven") === 0) {
       const built = this.g.state.plots.filter(Boolean).length;
       this.g.state.quests.haven.progress = built;
@@ -170,7 +219,9 @@ export class Story {
     }
   }
 
-  onBefriend() {
+  onBefriend(species?: string, id?: string) {
+    if (id === "thief" && this.active("thief") && this.stage("thief") === 1) this.advance("thief");
+    void species;
     if (this.stage("main") === 2) this.advance("main");
     else if (this.stage("main") === 5) {
       const q = this.g.state.quests.main;
@@ -182,7 +233,7 @@ export class Story {
 
   /** Main quest tracker text, else first active side quest. */
   tracked(): { id: string; title: string; text: string; icon: string } | null {
-    const order = ["main", "tea", "bouquet", "yarn", "hide", "pebbles", "haven"];
+    const order = ["main", "bakery", "thief", "sewing", "tea", "bouquet", "yarn", "hide", "pebbles", "haven"];
     for (const id of order) {
       if (this.active(id)) return { id, title: QUESTS[id].name, text: this.objective(id), icon: QUESTS[id].icon };
     }
@@ -190,7 +241,7 @@ export class Story {
   }
 
   /** What should the guide arrow point at? An NPC id, a building door, or a world spot. */
-  objectiveTarget(): { npc?: NpcId; building?: string; spot?: [number, number]; critter?: string; cave?: boolean } | null {
+  objectiveTarget(): { npc?: NpcId; building?: string; spot?: [number, number]; critter?: string; cave?: boolean; crumb?: boolean } | null {
     const m = this.stage("main");
     const q = (id: string) => this.active(id);
     switch (m) {
@@ -209,6 +260,19 @@ export class Story {
       case 8:
         return { npc: "mayor" };
     }
+    if (q("bakery")) {
+      const b = this.stage("bakery");
+      if (b <= 1) return { spot: [-25.3, -14.5] };
+      if (b === 3) return { building: "bakery" };
+      if (b === 4) return { npc: "mocha" };
+    }
+    if (q("thief")) {
+      const t = this.stage("thief");
+      if (t === 0) return { crumb: true };
+      if (t === 1) return { critter: "thief" };
+      if (t === 2) return { npc: "mocha" };
+    }
+    if (q("sewing") && this.stage("sewing") === 1) return { npc: "stitch" };
     if (q("tea") && this.stage("tea") === 1) return { npc: "granny" };
     if (q("bouquet") && this.stage("bouquet") === 1) return { npc: "flora" };
     if (q("yarn") && this.stage("yarn") === 1) return { npc: "stitch" };
@@ -232,7 +296,9 @@ export class Story {
       case "flora":
         return m >= 5 && (!this.g.state.quests.bouquet || (this.active("bouquet") && this.stage("bouquet") === 1));
       case "stitch":
-        return m >= 5 && (!this.g.state.quests.yarn || (this.active("yarn") && this.stage("yarn") === 1));
+        return (m >= 1 && !this.g.state.quests.sewing) || (this.active("sewing") && this.stage("sewing") === 1) || (m >= 5 && this.done("sewing") && (!this.g.state.quests.yarn || (this.active("yarn") && this.stage("yarn") === 1)));
+      case "mocha":
+        return m >= 5 && (!this.g.state.quests.bakery || (this.active("bakery") && this.stage("bakery") === 4) || (this.done("bakery") && !this.g.state.quests.thief) || (this.active("thief") && this.stage("thief") === 2));
       case "marina":
         return m >= 5 && (!this.g.state.quests.pebbles || (this.active("pebbles") && this.stage("pebbles") === 1));
       case "pip":
@@ -336,7 +402,7 @@ export class Story {
           await say([{ ...W, text: "The Crystal Cave is north-west of Whisper Meadow. Follow the little path past the flowers!" }]);
         } else {
           const seen = g.state.seen.length;
-          await say([{ ...W, text: `Your journal has ${seen} of 10 critters. ${seen >= 10 ? "Every single one! Magnificent!" : "Keep exploring — each zone has its own critters!"}` }]);
+          await say([{ ...W, text: `Your journal has ${seen} of ${SPECIES_IDS.length} critters. ${seen >= SPECIES_IDS.length ? "Every single one! Magnificent!" : "Keep exploring — each zone has its own critters!"}` }]);
         }
         break;
       }
@@ -433,9 +499,30 @@ export class Story {
 
       case "stitch": {
         const W = who("stitch");
-        if (m < 5) {
+        if (m < 1) {
           await say([{ ...W, text: "Oh, hello! Mind the pins! I'm stitching a quilt with a pattern of stars." }]);
-        } else if (!g.state.quests.yarn) {
+        } else if (!g.state.quests.sewing) {
+          await say([
+            { ...W, text: `Oh! You're ${P}, aren't you? Have you ever wanted to make your *own clothes*?` },
+            { ...W, text: "I can teach you to *sew*! And here's my secret: the prettiest colours come from *flowers*." },
+            { ...W, text: "Every flower makes a different dye — pink roses, yellow sunflowers, blue bluebells... Pick *3 dye flowers* and bring them to me!" },
+            { ...W, text: "You'll find daisies and poppies right here in the village, and lots more out in the wild." },
+          ]);
+          this.start("sewing");
+        } else if (this.active("sewing") && this.stage("sewing") === 0) {
+          await say([{ ...W, text: `You have ${this.dyeCount()} of 3 dye flowers. Look for the flowers with a little sparkle!` }]);
+        } else if (this.active("sewing") && this.stage("sewing") === 1) {
+          await say([
+            { ...W, text: "Ooh, what lovely colours! Now watch closely: pick a *pattern*, choose your *colours*, and stitch-stitch-stitch!" },
+            { ...W, text: "You're a natural! From now on you can use my *sewing machine* whenever you like." },
+            { ...W, text: "Each piece needs a few *Petals* for the fabric, and one dye flower for every colour you use. Have fun!" },
+          ]);
+          g.state.skills.sewing = true;
+          this.complete("sewing");
+          g.ui.toast("New skill: Sewing! Use Stitch's sewing machine.", "🧵", "var(--lav)");
+          const c = await say([{ ...W, text: "Want to sew something right now?", choices: ["Yes, let's sew!", "Maybe later"] }]);
+          if (c === 0) await g.openSewing();
+        } else if (m >= 5 && !g.state.quests.yarn) {
           await say([
             { ...W, text: "Oh no, oh no! A gust of wind blew my *yarn balls* right out the window!" },
             { ...W, text: "They rolled far away — one to the *meadow*, one to the *woods*, and one to the *pond*. Can you find them?" },
@@ -453,7 +540,73 @@ export class Story {
           g.unlockHat("beret");
           this.complete("yarn");
         } else {
-          await say([{ ...W, text: "Want to change your look? Open your bag and pick *Style*!" }]);
+          const c = await say([{ ...W, text: "Back for more sewing? My machine is all yours!", choices: ["Let's sew!", "Just visiting"] }]);
+          if (c === 0) await g.openSewing();
+        }
+        break;
+      }
+
+      case "mocha": {
+        const W = who("mocha");
+        if (m < 5) {
+          await say([
+            { ...W, text: "Mew! Welcome to my bakery! Everything is fresh out of the oven." },
+            { ...W, text: "Once you're a real Critter Friend, come back and I'll teach you to *bake*! Purr-omise!" },
+          ]);
+        } else if (!g.state.quests.bakery) {
+          await say([
+            { ...W, text: `${P}! The Critter Friend! Mrrow, I've been hoping you'd visit.` },
+            { ...W, text: "Did you know critters *love* treats? And yummy food can give *you* special powers too!" },
+            { ...W, text: "Every good baker starts with the basics. Here — *wheat seeds* and *carrot seeds* for your very own garden!" },
+            { ...W, text: "There are garden beds right next to *your cottage*. Plant some *wheat*, and water it so it grows twice as fast!" },
+          ]);
+          g.state.skills.gardening = true;
+          g.state.skills.cooking = true;
+          this.start("bakery");
+          g.ui.toast("New skills: Gardening & Cooking!", "🌱", "var(--mint)");
+        } else if (this.active("bakery") && this.stage("bakery") < 4) {
+          const tips = [
+            "Plant *wheat* in the garden beds beside your cottage!",
+            "Your wheat is growing! Water it, then come back when it sparkles.",
+            "Cookies need *honey*! The beehives are out in *Whisper Meadow*.",
+            "Use my *oven* to bake *Critter Cookies*: 1 Wheat + 1 Honey!",
+          ];
+          await say([{ ...W, text: tips[this.stage("bakery")] }]);
+        } else if (this.active("bakery") && this.stage("bakery") === 4) {
+          await say([
+            { ...W, text: "Mmm, these smell purr-fect! You're a real baker now!" },
+            { ...W, text: "Here are *strawberry* and *pumpkin seeds*, and my whole *recipe book*. Cakes, pies, soups, muffins..." },
+            { ...W, text: "Some treats make *you* stronger, and some are for *sharing* with your critter friends. Check your bag!" },
+            { ...W, text: "Oh! And the *order board* outside — villagers post what they're craving. Deliver food and they'll reward you!" },
+          ]);
+          this.complete("bakery");
+          g.ui.toast("All recipes & seeds unlocked!", "📖", "var(--butter)");
+        } else if (this.done("bakery") && !g.state.quests.thief) {
+          await say([
+            { ...W, text: "Mew... can I tell you a secret? Someone's been *nibbling my pastries* every night!" },
+            { ...W, text: "This morning I found a trail of *crumbs* leading away from the bakery. Could you follow it and find the little thief?" },
+          ]);
+          this.start("thief");
+          g.life.refreshCrumbs();
+        } else if (this.active("thief") && this.stage("thief") < 2) {
+          await say([{ ...W, text: this.stage("thief") === 0 ? "The crumbs start right outside my door and head *west*!" : "A stripy tail in *Mossy Woods*? Be gentle — a *Critter Cookie* might help!" }]);
+        } else if (this.active("thief") && this.stage("thief") === 2) {
+          if (!g.partyHas("redpanda")) {
+            await say([{ ...W, text: "You found the pastry thief? Bring them along in your party so I can meet them!" }]);
+          } else {
+            await say([
+              { ...W, text: "So YOU'RE the one who's been eating my muffins! Mrrrow..." },
+              { ...W, text: "...How can I stay cross with that fluffy face? You can be my official *taste-tester* instead!" },
+              { ...W, text: `Thank you, ${P}. Here's a little *chef's hat* — you're an honorary baker of Cozy Hollow!` },
+            ]);
+            g.unlockHat("chef");
+            g.give("shortcake", 2);
+            this.complete("thief");
+          }
+        } else {
+          const c = await say([{ ...W, text: "What can I do for you, sweetie?", choices: ["Bake something", "Café orders", "Just saying hi"] }]);
+          if (c === 0) await g.openOven();
+          else if (c === 1) await g.openOrders();
         }
         break;
       }

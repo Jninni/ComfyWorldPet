@@ -284,6 +284,37 @@ export class Critter {
       g.restore();
     }
 
+    const rp = sp === "redpanda";
+    // red panda: dark legs/belly, white mask, darker rust tear marks
+    const rpDark = rp ? darken(mix(this.body, C.choco, 0.6), 0.35) : "";
+    if (rp) {
+      // big fluffy ringed tail swishing out at the side
+      const sw = Math.sin(t * 2.2) * 0.14 + (happyish ? Math.sin(t * 9) * 0.12 : 0);
+      g.save();
+      g.translate(S * 0.7, S * 0.5);
+      g.rotate(-0.4 + sw);
+      g.translate(S * 0.5, -S * 0.3);
+      g.rotate(-0.75);
+      const tail = () => g.ellipse(0, 0, S * 0.62, S * 0.3, 0, 0, Math.PI * 2);
+      g.beginPath();
+      tail();
+      ink(g, this.body, lw * 2);
+      g.save();
+      g.clip();
+      g.fillStyle = C.cream;
+      for (const k of [-0.18, 0.2]) {
+        g.beginPath();
+        g.ellipse(k * S, 0, S * 0.1, S * 0.36, 0, 0, Math.PI * 2);
+        g.fill();
+      }
+      g.beginPath();
+      g.ellipse(S * 0.62, 0, S * 0.2, S * 0.36, 0, 0, Math.PI * 2);
+      g.fillStyle = darken(this.body, 0.22);
+      g.fill();
+      g.restore();
+      g.restore();
+    }
+
     if (sp === "puffbun") {
       for (const s of [-1, 1]) {
         const flop = s === 1 ? 0.25 + Math.sin(t * 2) * 0.08 : 0;
@@ -321,6 +352,24 @@ export class Critter {
         };
         back.push(tri(1, S * 0.2));
         innerEars.push(tri(0.55, 0));
+      }
+    } else if (rp) {
+      for (const s of [-1, 1]) {
+        const a = s * (0.5 + earWiggle);
+        const ear = (k: number, inset: number) => () => {
+          g.save();
+          g.translate(s * S * 0.58, -S * 0.52);
+          g.rotate(a);
+          const w = S * 0.34 * k,
+            h = S * 0.5 * k;
+          g.moveTo(-w, inset);
+          g.quadraticCurveTo(-w * 0.95, -h * 1.05, 0, -h);
+          g.quadraticCurveTo(w * 0.95, -h * 1.05, w, inset);
+          g.closePath();
+          g.restore();
+        };
+        back.push(ear(1, S * 0.22));
+        innerEars.push(ear(0.66, S * 0.02));
       }
     } else if (sp === "hoglet") {
       const n = 9;
@@ -369,14 +418,14 @@ export class Critter {
 
     // feet behind body edge
     const feet = [-1, 1].map((s) => () => g.ellipse(s * S * 0.42, S * 0.84, S * 0.26, S * 0.16, 0, 0, Math.PI * 2));
-    const innerC = sp === "glowbat" ? lighten(this.dark, 0.35) : sp === "fennix" ? C.cream : C.pink;
+    const innerC = sp === "glowbat" ? lighten(this.dark, 0.35) : sp === "fennix" ? C.cream : rp ? this.body : C.pink;
 
     /* ---------- body ---------- */
     if (sp === "ribbit") {
       // eye bumps merge into the head: one union outline
       silhouette(g, [...back, body, ...feet], this.body, lw);
     } else {
-      if (back.length) silhouette(g, back, sp === "hoglet" ? this.dark : this.body, lw);
+      if (back.length) silhouette(g, back, sp === "hoglet" ? this.dark : rp ? C.white : this.body, lw);
       if (innerEars.length) {
         g.fillStyle = innerC;
         for (const s of innerEars) {
@@ -386,6 +435,14 @@ export class Critter {
         }
       }
       silhouette(g, [body, ...feet], this.body, lw);
+      if (rp) {
+        g.fillStyle = rpDark;
+        for (const f of feet) {
+          g.beginPath();
+          f();
+          g.fill();
+        }
+      }
     }
     // shading inside body
     g.save();
@@ -401,7 +458,7 @@ export class Critter {
     // belly patch
     g.beginPath();
     g.ellipse(0, S * 0.55, S * 0.58, S * 0.42, 0, 0, Math.PI * 2);
-    g.fillStyle = sp === "hoglet" || sp === "fennix" ? C.cream : this.light;
+    g.fillStyle = sp === "hoglet" || sp === "fennix" ? C.cream : rp ? rpDark : this.light;
     g.fill();
     g.setLineDash([S * 0.07, S * 0.06]);
     g.strokeStyle = rgba(darken(this.body, 0.4), 0.45);
@@ -430,7 +487,7 @@ export class Critter {
       g.rotate(a);
       g.beginPath();
       g.ellipse(0, S * 0.13, S * 0.13, S * 0.2, 0, 0, Math.PI * 2);
-      ink(g, this.body, lw * 2);
+      ink(g, rp ? rpDark : this.body, lw * 2);
       g.beginPath();
       g.ellipse(0, S * 0.22, S * 0.065, S * 0.05, 0, 0, Math.PI * 2);
       g.fillStyle = rgba(C.pinkDeep, 0.5);
@@ -446,6 +503,36 @@ export class Critter {
     const eyeY = sp === "ribbit" ? -S * 0.68 : -S * 0.06;
     const eyeX = sp === "ribbit" ? 0.42 : eyeSpread;
     const eyeSize = sp === "molly" ? 0.75 : sp === "ribbit" ? 1.05 : 1;
+
+    if (rp) {
+      // classic red panda mask: white cheek patches, muzzle and eyebrow dots, with rusty tear marks
+      g.save();
+      g.beginPath();
+      body();
+      g.clip();
+      g.fillStyle = C.white;
+      for (const s of [-1, 1]) {
+        g.beginPath();
+        g.ellipse(s * S * 0.66 + lx * 0.6, S * 0.14 + ly, S * 0.34, S * 0.25, s * 0.35, 0, Math.PI * 2);
+        g.fill();
+        g.beginPath();
+        g.ellipse(s * S * 0.3 + lx, -S * 0.36 + ly, S * 0.1, S * 0.065, s * 0.2, 0, Math.PI * 2);
+        g.fill();
+      }
+      g.beginPath();
+      g.ellipse(lx, S * 0.25 + ly, S * 0.3, S * 0.21, 0, 0, Math.PI * 2);
+      g.fill();
+      g.strokeStyle = darken(this.body, 0.18);
+      g.lineCap = "round";
+      g.lineWidth = S * 0.085;
+      for (const s of [-1, 1]) {
+        g.beginPath();
+        g.moveTo(s * S * 0.37 + lx, S * 0.06 + ly);
+        g.quadraticCurveTo(s * S * 0.36 + lx, S * 0.2 + ly, s * S * 0.27 + lx, S * 0.34 + ly);
+        g.stroke();
+      }
+      g.restore();
+    }
 
     // blush
     g.save();

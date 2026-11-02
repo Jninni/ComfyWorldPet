@@ -13,10 +13,11 @@ import { buildFlowershop } from "./buildings/int_flowershop";
 import { buildSewing } from "./buildings/int_sewing";
 import { buildHome } from "./buildings/int_home";
 import { buildWorkshop } from "./buildings/int_workshop";
+import { buildBakery } from "./buildings/int_bakery";
 
-export type BuildingId = "home" | "teahouse" | "library" | "flowershop" | "sewing" | "workshop";
+export type BuildingId = "home" | "teahouse" | "library" | "flowershop" | "sewing" | "workshop" | "bakery";
 
-export const BUILDING_IDS: BuildingId[] = ["home", "teahouse", "library", "flowershop", "sewing", "workshop"];
+export const BUILDING_IDS: BuildingId[] = ["home", "teahouse", "library", "flowershop", "sewing", "workshop", "bakery"];
 
 export const BUILDING_INFO: Record<BuildingId, { name: string; owner: string /* npc id or "player" */ }> = {
   home: { name: "Your Cozy Cottage", owner: "player" },
@@ -25,6 +26,7 @@ export const BUILDING_INFO: Record<BuildingId, { name: string; owner: string /* 
   flowershop: { name: "Flora's Flower Shop", owner: "flora" },
   sewing: { name: "Stitch's Sewing Room", owner: "stitch" },
   workshop: { name: "Bramble's Workshop", owner: "bramble" },
+  bakery: { name: "Mocha's Bakery & Café", owner: "mocha" },
 };
 
 export function buildExterior(scene: Scene, id: BuildingId, pos: Vector3, rotY: number): ExteriorDef {
@@ -45,5 +47,7 @@ export function buildInterior(scene: Scene, id: BuildingId, origin: Vector3): In
       return buildHome(scene, origin);
     case "workshop":
       return buildWorkshop(scene, origin);
+    case "bakery":
+      return buildBakery(scene, origin);
   }
 }

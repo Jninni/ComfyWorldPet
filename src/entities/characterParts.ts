@@ -6,7 +6,7 @@
  */
 import { Mesh, MeshBuilder, Vector3, Matrix, Quaternion, TransformNode, VertexBuffer, VertexData, StandardMaterial, type Scene, type Material } from "@babylonjs/core";
 import { col } from "../render/Palette";
-import { paint, finishMesh, ball, blob, type ShapeOpts, type V3, type BuildOpts, type ColorLike } from "../render/Shapes";
+import { paint, finishMesh, fixWinding, ball, blob, type ShapeOpts, type V3, type BuildOpts, type ColorLike } from "../render/Shapes";
 import { toonMat } from "../render/Toon";
 
 /* ------------------------------------------------------------------ */
@@ -22,13 +22,48 @@ export interface CharacterAnimState {
 
 export type EmoteKind = "wave" | "happy" | "surprised" | "think" | "nod";
 
-export type HatId = "none" | "beret" | "flower" | "bunnyears" | "strawhat" | "crown";
-/** Player customisation (hex colours). */
+export type HatId = "none" | "beret" | "flower" | "bunnyears" | "strawhat" | "crown" | "chef";
+/** Garment cut (sewing skill). */
+export type OutfitStyle = "overalls" | "dress" | "hoodie" | "tunic" | "raincoat";
+/** Worn accessory (sewing skill). */
+export type AccessoryId = "none" | "scarf" | "bow" | "cape" | "backpack";
+export const OUTFIT_STYLES: OutfitStyle[] = ["overalls", "dress", "hoodie", "tunic", "raincoat"];
+export const ACCESSORIES: AccessoryId[] = ["none", "scarf", "bow", "cape", "backpack"];
+
+/**
+ * Player customisation (hex colours). Everything after `hat` is optional so looks saved before the
+ * wardrobe existed still load; see `resolveLook` for the defaults.
+ */
 export interface PlayerLook {
   skin: string;
   hair: string;
+  /** main garment colour */
   outfit: string;
   hat: HatId;
+  /** default "overalls" */
+  style?: OutfitStyle;
+  /** accent / trim colour (straps & shirt, pockets, collar, cuffs, hood lining, buttons…). default "#fff6e6" */
+  outfit2?: string;
+  /** default "none" */
+  accessory?: AccessoryId;
+  /** default "#f8b9cb" */
+  accessoryColor?: string;
+}
+
+export const LOOK_DEFAULTS = { style: "overalls", outfit2: "#fff6e6", accessory: "none", accessoryColor: "#f8b9cb" } as const satisfies Partial<PlayerLook>;
+
+/** Fill in the optional wardrobe fields (unknown ids fall back to the defaults too). */
+export function resolveLook(look: PlayerLook): Required<PlayerLook> {
+  return {
+    skin: look.skin,
+    hair: look.hair,
+    outfit: look.outfit,
+    hat: look.hat ?? "none",
+    style: look.style && OUTFIT_STYLES.includes(look.style) ? look.style : LOOK_DEFAULTS.style,
+    outfit2: look.outfit2 || LOOK_DEFAULTS.outfit2,
+    accessory: look.accessory && ACCESSORIES.includes(look.accessory) ? look.accessory : LOOK_DEFAULTS.accessory,
+    accessoryColor: look.accessoryColor || LOOK_DEFAULTS.accessoryColor,
+  };
 }
 
 export interface CharacterModel {
@@ -117,6 +152,101 @@ export function flower(scene: Scene, r: number, petal: ColorLike, center: ColorL
   }
   parts.push(ball(scene, r * 0.42, { pos: [0, 0, r * 0.14], color: center, scale: [1, 1, 0.7] }, 6));
   return group(parts, o);
+}
+
+export interface ShellSpec {
+  yTop: number;
+  yBot: number;
+  rTop: number;
+  rBot: number;
+  /** half-angle (rad) of the sheet, centred on -Z (the back) */
+  arc: number;
+  thick: number;
+  /** scalloped bottom edge: number of lobes and how far they hang */
+  lobes?: number;
+  lobeDepth?: number;
+  nu?: number;
+  nv?: number;
+}
+
+/**
+ * A curved, flaring sheet with real thickness wrapped around the Y axis (capes, collars, capelets).
+ * Closed mesh with smooth normals, so it takes an inverted-hull outline cleanly.
+ */
+export function shell(scene: Scene, sp: ShellSpec, o: ShapeOpts = {}): Mesh {
+  const NU = sp.nu ?? 26,
+    NV = sp.nv ?? 6;
+  const row = 2 * (NU + 1);
+  const P: number[] = [];
+  const refSide: number[] = [];
+  for (let i = 0; i <= NV; i++) {
+    const v = i / NV;
+    for (let side = 0; side < 2; side++) {
+      for (let jj = 0; jj <= NU; jj++) {
+        const j = side === 0 ? jj : NU - jj;
+        const u = j / NU;
+        const a = -sp.arc + 2 * sp.arc * u;
+        const lobe = sp.lobes ? (sp.lobeDepth ?? 0.03) * Math.pow(Math.abs(Math.sin(Math.PI * u * sp.lobes)), 0.6) : 0;
+        const y = sp.yTop - (sp.yTop - sp.yBot + lobe) * v;
+        const t = (sp.yTop - y) / (sp.yTop - sp.yBot);
+        const r = sp.rTop + (sp.rBot - sp.rTop) * t - (side ? sp.thick : 0);
+        const sa = Math.sin(a),
+          ca = Math.cos(a);
+        P.push(sa * r, y, -ca * r);
+        if (side) refSide.push(-sa, 0, ca);
+        else refSide.push(sa, 0, -ca);
+      }
+    }
+  }
+  const nV = P.length / 3;
+  const fill = (x: number, y: number, z: number) => {
+    const a: number[] = [];
+    for (let i = 0; i < nV; i++) a.push(x, y, z);
+    return a;
+  };
+  const sideIdx: number[] = [],
+    endP: number[] = [],
+    endN: number[] = [],
+    capT: number[] = [],
+    capB: number[] = [];
+  for (let i = 0; i < NV; i++) {
+    for (let k = 0; k < row; k++) {
+      const k2 = (k + 1) % row;
+      const a = i * row + k,
+        b = i * row + k2,
+        c = (i + 1) * row + k2,
+        d = (i + 1) * row + k;
+      const dst = k === NU ? endP : k === row - 1 ? endN : sideIdx;
+      dst.push(a, b, c, a, c, d);
+    }
+  }
+  for (const [ri, dst] of [
+    [0, capT],
+    [NV, capB],
+  ] as [number, number[]][]) {
+    for (let jj = 0; jj < NU; jj++) {
+      const o0 = ri * row + jj,
+        o1 = o0 + 1;
+      const i0 = ri * row + NU + 1 + (NU - jj),
+        i1 = i0 - 1;
+      dst.push(o0, o1, i1, o0, i1, i0);
+    }
+  }
+  fixWinding(P, sideIdx, refSide);
+  fixWinding(P, endP, fill(Math.cos(sp.arc), 0, Math.sin(sp.arc)));
+  fixWinding(P, endN, fill(-Math.cos(sp.arc), 0, Math.sin(sp.arc)));
+  fixWinding(P, capT, fill(0, 1, 0));
+  fixWinding(P, capB, fill(0, -1, 0));
+  const idx = [...sideIdx, ...endP, ...endN, ...capT, ...capB];
+  const vd = new VertexData();
+  vd.positions = P;
+  vd.indices = idx;
+  const nor: number[] = [];
+  VertexData.ComputeNormals(P, idx, nor);
+  vd.normals = nor;
+  const m = new Mesh(o.name ?? "shell", scene);
+  vd.applyToMesh(m);
+  return prep(m, o);
 }
 
 const D2R = Math.PI / 180;

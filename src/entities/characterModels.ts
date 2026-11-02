@@ -4,9 +4,10 @@
  * Every model: origin at feet centre, faces +Z, ~8–13 draw calls. Animated parts are separate
  * meshes parented to TransformNode pivots (see characterParts.Rig); everything static is merged.
  */
-import { type Scene, type Mesh, Vector3 } from "@babylonjs/core";
+import { type Scene, type Mesh, type TransformNode, Vector3 } from "@babylonjs/core";
 import { ball, blob, softBox, softCyl, lathe, capsule, disc, torus, cone, type V3, type ColorLike } from "../render/Shapes";
 import { mixCol } from "../render/Palette";
+import { toonMat } from "../render/Toon";
 import {
   Rig,
   Kit,
@@ -18,30 +19,52 @@ import {
   placeOn,
   surfCurve,
   wrapBand,
+  profileRadius,
+  shell,
+  resolveLook,
+  OUTFIT_STYLES,
+  ACCESSORIES,
+  LOOK_DEFAULTS,
   type RigSpec,
   type CharacterModel,
   type CharacterAnimState,
   type PlayerLook,
   type HatId,
+  type OutfitStyle,
+  type AccessoryId,
   type EmoteKind,
 } from "./characterParts";
 
-export type { CharacterModel, CharacterAnimState, PlayerLook, HatId, EmoteKind };
+export type { CharacterModel, CharacterAnimState, PlayerLook, HatId, OutfitStyle, AccessoryId, EmoteKind };
+export { OUTFIT_STYLES, ACCESSORIES, LOOK_DEFAULTS, resolveLook };
 
 /* ------------------------------------------------------------------ */
 /* Look options                                                        */
 /* ------------------------------------------------------------------ */
 
-export const DEFAULT_LOOK: PlayerLook = { skin: "#ffe2cf", hair: "#8a5a44", outfit: "#8fc3ea", hat: "none" };
+export const DEFAULT_LOOK: PlayerLook = { skin: "#ffe2cf", hair: "#8a5a44", outfit: "#8fc3ea", hat: "none", ...LOOK_DEFAULTS };
 
-export const LOOK_OPTIONS: { skin: string[]; hair: string[]; outfit: string[]; hat: HatId[] } = {
+export const LOOK_OPTIONS: {
+  skin: string[];
+  hair: string[];
+  outfit: string[];
+  hat: HatId[];
+  style: OutfitStyle[];
+  outfit2: string[];
+  accessory: AccessoryId[];
+  accessoryColor: string[];
+} = {
   skin: ["#ffe2cf", "#f8d0b0", "#e9b58e", "#c98e66", "#9a6446"],
   hair: ["#8a5a44", "#4a3a52", "#f3c76a", "#ee8a63", "#f4a3c4", "#a993dc"],
   outfit: ["#8fc3ea", "#ef8fab", "#8fd4b5", "#b48ce6", "#f5cf6b", "#ff9f8f"],
-  hat: ["none", "beret", "flower", "bunnyears", "strawhat", "crown"],
+  hat: ["none", "beret", "flower", "bunnyears", "strawhat", "crown", "chef"],
+  style: OUTFIT_STYLES,
+  outfit2: ["#fff6e6", "#f8b9cb", "#ffe066", "#bfe9d6", "#cdb9f0", "#a8d4f5"],
+  accessory: ACCESSORIES,
+  accessoryColor: ["#f8b9cb", "#ff8f8a", "#ffd45e", "#8fd4b5", "#8fb4ea", "#b48ce6"],
 };
 
-export type NpcId = "mayor" | "granny" | "flora" | "stitch" | "hoot" | "pip" | "bramble" | "marina";
+export type NpcId = "mayor" | "granny" | "flora" | "stitch" | "hoot" | "pip" | "bramble" | "marina" | "mocha";
 
 export const NPC_INFO: Record<NpcId, { name: string; color: string }> = {
   mayor: { name: "Mayor Bunbury", color: "#b48ce6" },
@@ -52,6 +75,7 @@ export const NPC_INFO: Record<NpcId, { name: string; color: string }> = {
   pip: { name: "Pip", color: "#ffa64d" },
   bramble: { name: "Bramble", color: "#e8b53e" },
   marina: { name: "Marina", color: "#6fb9e2" },
+  mocha: { name: "Mocha", color: "#e8976a" },
 };
 
 /* ------------------------------------------------------------------ */
@@ -237,12 +261,30 @@ export function buildPlayer(scene: Scene, look: PlayerLook): CharacterModel {
     persona: { idleBounce: 0.0, armRestZ: 0.16 },
   };
   const rig = new Rig(scene, spec, 7);
+  // springy accessory pivots live for the model's whole life (setLook only rebuilds meshes)
+  const nodes: PlayerNodes = {
+    cape: rig.node("cape", rig.body, CAPE_PIVOT),
+    scarf: rig.node("scarfTail", rig.body, SCARF_PIVOT),
+  };
+  rig.addSecondary({ node: nodes.cape, axis: "x", k: 38, d: 3.2, gy: 0.016, gspeed: 0.42, min: -0.06, max: 0.8 });
+  rig.addSecondary({ node: nodes.cape, axis: "z", k: 46, d: 3, gyaw: 0.22, wagAmp: 0.035, wagFreq: 0.65, min: -0.3, max: 0.3 });
+  rig.addSecondary({ node: nodes.scarf, axis: "z", k: 55, d: 3.2, gyaw: -0.3, wagAmp: 0.07, wagFreq: 0.85, min: -0.6, max: 0.6 });
+  rig.addSecondary({ node: nodes.scarf, axis: "x", k: 48, d: 3.6, gy: -0.014, gspeed: -0.16, min: -0.7, max: 0.12 });
   let current = { ...look };
   const build = (lk: PlayerLook) => {
+    const L = resolveLook(lk);
     const kit = new Kit(scene, rig);
     stdGroups(kit, rig, 0.015);
+    if (L.style === "raincoat") {
+      // glossy vinyl: same draw calls, shinier material on the coat + sleeves
+      const gloss = toonMat(scene, { name: "charGloss", rim: 0.42, specular: 0.5 });
+      kit.def("body", rig.body, { outline: 0.015, material: gloss }).def("armL", rig.armL, { outline: 0.015, material: gloss }).def("armR", rig.armR, { outline: 0.015, material: gloss });
+    }
+    kit.flatInto("bodyFlat", "body");
     kit.def("hat", rig.head, { outline: 0.015 });
-    playerParts(kit, lk);
+    kit.def("cape", nodes.cape, { outline: 0.015 });
+    kit.def("scarfTail", nodes.scarf, { outline: 0.014 });
+    playerParts(kit, L, nodes);
     kit.build();
   };
   build(current);
@@ -255,18 +297,98 @@ export function buildPlayer(scene: Scene, look: PlayerLook): CharacterModel {
   return model;
 }
 
-function playerParts(kit: Kit, look: PlayerLook) {
+interface PlayerNodes {
+  cape: TransformNode;
+  scarf: TransformNode;
+}
+const CAPE_PIVOT: V3 = [0, 0.655, -0.07];
+const SCARF_PIVOT: V3 = [-0.075, 0.615, 0.12];
+
+/* ---- garment silhouettes (lathe profiles, [radius, y]) ---- */
+const P_PANTS: [number, number][] = [
+  [0, 0.2],
+  [0.148, 0.205],
+  [0.168, 0.25],
+  [0.17, 0.32],
+  [0.162, 0.42],
+  [0, 0.42],
+];
+const P_SKIRT: [number, number][] = [
+  [0, 0.15],
+  [0.232, 0.15],
+  [0.25, 0.168],
+  [0.24, 0.2],
+  [0.205, 0.29],
+  [0.168, 0.39],
+  [0.152, 0.445],
+  [0, 0.45],
+];
+const P_HOODIE: [number, number][] = [
+  [0, 0.215],
+  [0.152, 0.215],
+  [0.17, 0.235],
+  [0.176, 0.3],
+  [0.174, 0.4],
+  [0.158, 0.52],
+  [0.13, 0.61],
+  [0.097, 0.668],
+  [0.05, 0.7],
+  [0, 0.705],
+];
+const P_TUNIC: [number, number][] = [
+  [0, 0.19],
+  [0.178, 0.19],
+  [0.192, 0.205],
+  [0.18, 0.27],
+  [0.164, 0.34],
+  [0.16, 0.42],
+  [0.146, 0.52],
+  [0.118, 0.61],
+  [0.087, 0.67],
+  [0.04, 0.7],
+  [0, 0.7],
+];
+const P_COAT: [number, number][] = [
+  [0, 0.155],
+  [0.235, 0.155],
+  [0.25, 0.175],
+  [0.238, 0.21],
+  [0.205, 0.3],
+  [0.175, 0.4],
+  [0.162, 0.5],
+  [0.14, 0.59],
+  [0.11, 0.65],
+  [0.06, 0.695],
+  [0, 0.705],
+];
+
+/** Outer silhouette of a set of lathes, resampled as one profile (for straps, capes, scarves). */
+function outerProfile(ps: [number, number][][]): [number, number][] {
+  const out: [number, number][] = [];
+  for (let y = 0.14; y <= 0.72; y += 0.02) {
+    let r = 0;
+    for (const p of ps) {
+      const ys = p.map((q) => q[1]);
+      if (y >= Math.min(...ys) && y <= Math.max(...ys)) r = Math.max(r, profileRadius(p, y));
+    }
+    out.push([r, y]);
+  }
+  return out;
+}
+
+function playerParts(kit: Kit, L: Required<PlayerLook>, nodes: PlayerNodes) {
   const s = kit.scene;
-  const skin = look.skin,
-    hair = look.hair,
-    outfit = look.outfit;
-  const shirt = "#fff4e4";
+  const skin = L.skin,
+    hair = L.hair,
+    outfit = L.outfit,
+    acc = L.outfit2;
   const H = P_HEAD;
+  const hoodUp = L.style === "hoodie" && L.hat === "none";
 
   /* ---- head ---- */
   kit.add("head", blob(s, H.r[0], H.r[1], H.r[2], { pos: H.c, color: skin, bottom: darker(skin, 0.05) }, 16));
   // ears peeking under the bob
-  for (const side of [-1, 1]) kit.add("head", blob(s, 0.04, 0.055, 0.035, { pos: [0.285 * side, 0.9, 0.03], color: skin }, 8));
+  if (!hoodUp) for (const side of [-1, 1]) kit.add("head", blob(s, 0.04, 0.055, 0.035, { pos: [0.285 * side, 0.9, 0.03], color: skin }, 8));
   // nose
   const n = placeOn(H.c, H.r, 0, -14, -0.006);
   kit.add("head", blob(s, 0.02, 0.014, 0.014, { pos: n.pos, rot: n.rot, color: darker(skin, 0.06) }, 8));
@@ -283,8 +405,6 @@ function playerParts(kit: Kit, look: PlayerLook) {
   /* ---- hair: bob with bangs ---- */
   const hairB = darker(hair, 0.12);
   kit.add("head", blob(s, 0.31, 0.295, 0.295, { pos: [0, 0.975, -0.04], color: hair, bottom: hairB }, 16));
-  // bob flip at the back
-  kit.add("head", blob(s, 0.3, 0.1, 0.28, { pos: [0, 0.79, -0.06], color: hairB }, 12));
   // bangs: scalloped fringe across the forehead
   const bangs: [number, number, number][] = [
     [-44, 25, 0.075],
@@ -297,65 +417,357 @@ function playerParts(kit: Kit, look: PlayerLook) {
     const p = placeOn(H.c, H.r, yw, pt, -0.012);
     kit.add("head", blob(s, r, r * 0.95, 0.05, { pos: p.pos, rot: [p.rot[0], p.rot[1], -yw * 0.006], color: hair }, 10));
   }
-  // side locks framing the cheeks
-  for (const side of [-1, 1]) {
-    const p = placeOn(H.c, H.r, 68 * side, -14, -0.02);
-    kit.add("head", blob(s, 0.065, 0.165, 0.09, { pos: p.pos, rot: [0, p.rot[1], 0.1 * side], color: hair, bottom: hairB }, 10));
+  if (!hoodUp) {
+    // bob flip at the back
+    kit.add("head", blob(s, 0.3, 0.1, 0.28, { pos: [0, 0.79, -0.06], color: hairB }, 12));
+    // side locks framing the cheeks
+    for (const side of [-1, 1]) {
+      const p = placeOn(H.c, H.r, 68 * side, -14, -0.02);
+      kit.add("head", blob(s, 0.065, 0.165, 0.09, { pos: p.pos, rot: [0, p.rot[1], 0.1 * side], color: hair, bottom: hairB }, 10));
+    }
+    // cowlick
+    kit.add("head", tube(s, bez([0.0, 1.24, 0.0], [0.0, 1.33, 0.06], [0.07, 1.33, 0.03], 8), 0.022, { color: hair }, 6, (u) => 1 - u * 0.75));
+  } else {
+    // little side wisps tucked inside the hood
+    for (const side of [-1, 1]) {
+      const p = placeOn(H.c, H.r, 58 * side, -6, -0.02);
+      kit.add("head", blob(s, 0.055, 0.12, 0.07, { pos: p.pos, rot: [0, p.rot[1], 0.12 * side], color: hair, bottom: hairB }, 10));
+    }
   }
-  // cowlick
-  kit.add("head", tube(s, bez([0.0, 1.24, 0.0], [0.0, 1.33, 0.06], [0.07, 1.33, 0.03], 8), 0.022, { color: hair }, 6, (u) => 1 - u * 0.75));
 
-  /* ---- body: shirt + overalls ---- */
-  kit.add("body", lathe(s, P_TORSO, { color: shirt, bottom: darker(shirt, 0.05) }, 18));
-  const pants: [number, number][] = [
-    [0, 0.2],
-    [0.148, 0.205],
-    [0.168, 0.25],
-    [0.17, 0.32],
-    [0.162, 0.42],
-    [0, 0.42],
-  ];
-  kit.add("body", lathe(s, pants, { color: outfit, bottom: darker(outfit, 0.12) }, 18));
-  // bib + straps + buttons
-  kit.add("body", softBox(s, 0.17, 0.15, 0.05, { pos: [0, 0.475, 0.125], rot: [-0.12, 0, 0], color: outfit }, 0.022));
-  kit.add("body", softBox(s, 0.075, 0.045, 0.02, { pos: [0, 0.46, 0.152], rot: [-0.12, 0, 0], color: lighter(outfit, 0.25) }, 0.01));
-  for (const side of [-1, 1]) {
-    kit.add("body", tube(s, bez([0.065 * side, 0.52, 0.135], [0.08 * side, 0.63, 0.11], [0.1 * side, 0.67, -0.01], 6), 0.017, { color: outfit }, 5));
-    kit.add("body", ball(s, 0.02, { pos: [0.064 * side, 0.528, 0.155], color: "#ffe066" }, 8));
+  /* ---- outfit ---- */
+  const prof = playerOutfit(kit, L, hoodUp);
+
+  /* ---- accessory (satchel unless the backpack replaces it) ---- */
+  if (L.accessory !== "backpack") satchel(kit, prof);
+  playerAccessory(kit, L, prof, hoodUp, nodes);
+
+  /* ---- hat ---- */
+  playerHat(kit, L.hat);
+}
+
+/** Builds body/arm/leg garments for the style and returns the outer torso silhouette. */
+function playerOutfit(kit: Kit, L: Required<PlayerLook>, hoodUp: boolean): [number, number][] {
+  const s = kit.scene;
+  const { skin, outfit } = L;
+  const acc = L.outfit2;
+  const sh: V3 = [0.15, 0.6, 0];
+  const add = (...m: Mesh[]) => kit.add("body", ...m);
+  let legCol: ColorLike = outfit;
+  let boot: ColorLike = "#a8727c";
+  let cuff: ColorLike | null = null; // rolled trouser cuff colour
+  let prof: [number, number][] = P_TORSO;
+  /** a little thing sitting on the garment surface at height y, angle a (rad, 0 = front) */
+  const onFront = (p: [number, number][], y: number, a: number, out = 0): V3 => {
+    const r = profileRadius(p, y) + out;
+    return [Math.sin(a) * r, y, Math.cos(a) * r];
+  };
+
+  switch (L.style) {
+    case "overalls": {
+      const shirt = acc;
+      add(lathe(s, P_TORSO, { color: shirt, bottom: darker(shirt, 0.05) }, 18));
+      add(lathe(s, P_PANTS, { color: outfit, bottom: darker(outfit, 0.12) }, 18));
+      // bib + accent pocket with a stitched heart, straps + buttons
+      add(softBox(s, 0.17, 0.15, 0.05, { pos: [0, 0.475, 0.125], rot: [-0.12, 0, 0], color: outfit }, 0.022));
+      add(softBox(s, 0.085, 0.055, 0.02, { pos: [0, 0.455, 0.153], rot: [-0.12, 0, 0], color: lighter(acc, 0.1), bottom: darker(acc, 0.06) }, 0.01));
+      add(heart(s, 0.03, darker(outfit, 0.05), { pos: [0, 0.457, 0.165], rot: [-0.12, 0, 0] }));
+      for (const side of [-1, 1]) {
+        add(tube(s, bez([0.065 * side, 0.52, 0.135], [0.08 * side, 0.63, 0.11], [0.1 * side, 0.67, -0.01], 6), 0.017, { color: outfit }, 5));
+        add(ball(s, 0.02, { pos: [0.064 * side, 0.528, 0.155], color: "#ffe066" }, 8));
+        // collar
+        add(blob(s, 0.055, 0.025, 0.04, { pos: [0.045 * side, 0.68, 0.06], rot: [0.3, 0.35 * side, -0.4 * side], color: shirt }, 8));
+      }
+      cuff = acc;
+      prof = outerProfile([P_TORSO, P_PANTS]);
+      break;
+    }
+    case "dress": {
+      add(lathe(s, P_TORSO, { color: outfit, bottom: darker(outfit, 0.05) }, 18));
+      add(lathe(s, P_SKIRT, { color: outfit, bottom: darker(outfit, 0.14) }, 22));
+      // scalloped hem
+      const N = 16;
+      for (let i = 0; i < N; i++) {
+        const a = (i / N) * Math.PI * 2;
+        add(blob(s, 0.05, 0.034, 0.03, { pos: [Math.sin(a) * 0.243, 0.16, Math.cos(a) * 0.243], rot: [0, a, 0], color: acc, bottom: darker(acc, 0.06) }, 8));
+      }
+      // waist sash + bow at the back
+      add(tube(s, wrapBand(P_SKIRT, 0.43, 0, 0.006, 26), 0.018, { color: acc }, 6));
+      for (const side of [-1, 1]) add(blob(s, 0.055, 0.035, 0.025, { pos: [0.05 * side, 0.44, -0.165], rot: [0, 0, -0.35 * side], color: acc }, 8));
+      add(ball(s, 0.022, { pos: [0, 0.44, -0.172], color: darker(acc, 0.08) }, 8));
+      // peter-pan collar + two little buttons
+      for (const side of [-1, 1]) add(blob(s, 0.06, 0.035, 0.03, { pos: [0.045 * side, 0.665, 0.075], rot: [0.55, 0.3 * side, -0.5 * side], color: acc, bottom: darker(acc, 0.04) }, 10));
+      for (const y of [0.6, 0.53]) add(ball(s, 0.014, { pos: onFront(P_TORSO, y, 0, 0.004), color: acc }, 6));
+      legCol = skin;
+      boot = "#f47a9a";
+      prof = outerProfile([P_TORSO, P_SKIRT]);
+      break;
+    }
+    case "hoodie": {
+      const pants = mixCol(outfit, INK, 0.42);
+      add(lathe(s, P_PANTS, { color: pants, bottom: darker(pants, 0.1) }, 18));
+      add(lathe(s, P_HOODIE, { color: outfit, bottom: darker(outfit, 0.08) }, 20));
+      // ribbed waistband
+      add(tube(s, wrapBand(P_HOODIE, 0.232, 0, -0.002, 26), 0.022, { color: darker(outfit, 0.08) }, 6));
+      // kangaroo pocket (accent piping on the openings)
+      add(softBox(s, 0.2, 0.1, 0.03, { pos: [0, 0.325, 0.168], rot: [-0.05, 0, 0], color: darker(outfit, 0.04) }, 0.03));
+      for (const side of [-1, 1]) add(tube(s, [[0.075 * side, 0.375, 0.186], [0.098 * side, 0.285, 0.186]], 0.008, { color: acc }, 4));
+      // drawstrings with aglets
+      for (const side of [-1, 1]) {
+        const top: V3 = [0.035 * side, 0.665, 0.105];
+        const end: V3 = [0.045 * side, 0.53, 0.168];
+        add(tube(s, bez(top, [0.042 * side, 0.6, 0.165], end, 5), 0.008, { color: acc }, 4));
+        add(ball(s, 0.016, { pos: end, color: acc, scale: [1, 1.4, 1] }, 6));
+      }
+      if (!hoodUp) {
+        // hood resting on the upper back: accent lining on top, ear nubs flopped backwards
+        add(blob(s, 0.15, 0.105, 0.075, { pos: [0, 0.585, -0.17], rot: [-0.25, 0, 0], color: outfit, bottom: darker(outfit, 0.08) }, 12));
+        add(blob(s, 0.115, 0.035, 0.05, { pos: [0, 0.665, -0.165], rot: [-0.45, 0, 0], color: acc }, 10));
+        for (const side of [-1, 1]) {
+          add(group([cone(s, 0.09, 0.045, { color: outfit, scale: [1, 1, 0.55] }, 8), cone(s, 0.055, 0.026, { pos: [0, 0.008, -0.018], color: acc, scale: [1, 1, 0.4] }, 6)], { pos: [0.075 * side, 0.6, -0.225], rot: [-2.0, 0, 0.3 * side] }));
+        }
+      }
+      legCol = pants;
+      boot = "#fffaf4";
+      prof = outerProfile([P_HOODIE, P_PANTS]);
+      break;
+    }
+    case "tunic": {
+      const tights = mixCol(outfit, INK, 0.5);
+      add(lathe(s, P_TUNIC, { color: outfit, bottom: darker(outfit, 0.1) }, 20));
+      // accent hem trim
+      add(tube(s, wrapBand(P_TUNIC, 0.205, 0, 0.004, 28), 0.013, { color: acc }, 5));
+      // belt + buckle
+      add(tube(s, wrapBand(P_TUNIC, 0.37, 0, 0.006, 26), 0.022, { color: "#a3754d" }, 6));
+      add(softBox(s, 0.06, 0.05, 0.02, { pos: onFront(P_TUNIC, 0.37, 0, 0.022), color: "#ffd45e" }, 0.01));
+      add(softBox(s, 0.03, 0.022, 0.02, { pos: onFront(P_TUNIC, 0.37, 0, 0.03), color: "#a3754d" }, 0.008));
+      // scalloped capelet collar with a lace-up V
+      add(shell(s, { yTop: 0.695, yBot: 0.6, rTop: 0.075, rBot: profileRadius(P_TUNIC, 0.6) + 0.03, arc: 2.62, thick: 0.02, lobes: 6, lobeDepth: 0.022 }, { color: acc, bottom: darker(acc, 0.05) }));
+      for (const [y0, y1] of [
+        [0.58, 0.535],
+        [0.535, 0.49],
+      ]) {
+        for (const side of [-1, 1]) add(tube(s, [onFront(P_TUNIC, y0, 0.16 * side, 0.004), onFront(P_TUNIC, y1, -0.16 * side, 0.004)], 0.0065, { color: acc }, 4));
+      }
+      add(blob(s, 0.035, 0.07, 0.01, { pos: onFront(P_TUNIC, 0.55, 0, -0.002), rot: [-0.25, 0, 0], color: darker(outfit, 0.15) }, 8));
+      legCol = tights;
+      prof = P_TUNIC;
+      break;
+    }
+    case "raincoat": {
+      const pants = mixCol(outfit, INK, 0.45);
+      add(lathe(s, P_COAT, { color: outfit, bottom: darker(outfit, 0.08) }, 22));
+      // placket + big accent buttons
+      add(blob(s, 0.014, 0.2, 0.01, { pos: onFront(P_COAT, 0.42, 0, -0.002), rot: [-0.18, 0, 0], color: darker(outfit, 0.12) }, 8));
+      for (const y of [0.56, 0.45, 0.34]) add(ball(s, 0.022, { pos: onFront(P_COAT, y, 0.11, 0.006), color: acc, bottom: darker(acc, 0.12), scale: [1, 1, 0.6] }, 8));
+      // pointy collar
+      for (const side of [-1, 1]) add(blob(s, 0.075, 0.03, 0.045, { pos: [0.05 * side, 0.675, 0.065], rot: [0.45, 0.4 * side, -0.55 * side], color: outfit, bottom: darker(outfit, 0.06) }, 10));
+      // pocket flaps
+      for (const side of [-1, 1]) {
+        const a = 0.62 * side;
+        add(softBox(s, 0.08, 0.035, 0.02, { pos: onFront(P_COAT, 0.3, a, 0.004), rot: [-0.25, a, 0], color: darker(outfit, 0.1) }, 0.01));
+      }
+      // painted gloss streaks (flat, no outline)
+      for (const [y, a, h] of [
+        [0.48, -0.55, 0.07],
+        [0.36, -0.6, 0.035],
+        [0.27, 0.95, 0.05],
+      ]) {
+        kit.add("bodyFlat", blob(s, 0.013, h, 0.008, { pos: onFront(P_COAT, y, a, 0.001), rot: [-0.25, a, 0.12], color: lighter(outfit, 0.7) }, 6));
+      }
+      legCol = pants;
+      boot = outfit;
+      prof = P_COAT;
+      break;
+    }
   }
-  // collar
-  for (const side of [-1, 1]) kit.add("body", blob(s, 0.055, 0.025, 0.04, { pos: [0.045 * side, 0.68, 0.06], rot: [0.3, 0.35 * side, -0.4 * side], color: shirt }, 8));
-  // satchel strap (right shoulder → left hip) + bag
-  kit.add("body", tube(s, wrapBand(P_TORSO, 0.47, 0.72, 0.012, 30), 0.016, { color: "#c99a6b" }, 5));
+
+  /* ---- arms ---- */
+  for (const side of [-1, 1] as const) {
+    const g = side > 0 ? "armR" : "armL";
+    const x = sh[0] * side;
+    switch (L.style) {
+      case "overalls":
+        arm(kit, side, sh, 0.22, 0.042, skin, 0.052, skin, { sleeve: acc, sleeveR: 0.066 });
+        break;
+      case "dress":
+        arm(kit, side, sh, 0.22, 0.04, skin, 0.052, skin, { sleeve: outfit, sleeveR: 0.082 });
+        kit.add(g, torus(s, 0.058, 0.024, { pos: [x + 0.012 * side, 0.54, 0], rot: [0, 0, 0.12 * side], color: acc }, 14));
+        break;
+      case "tunic":
+        arm(kit, side, sh, 0.22, 0.04, skin, 0.052, skin, { sleeve: outfit, sleeveR: 0.066 });
+        kit.add(g, capsule(s, 0.15, 0.05, { pos: [x + 0.02 * side, 0.545, 0], color: outfit, bottom: darker(outfit, 0.06) }));
+        kit.add(g, torus(s, 0.05, 0.022, { pos: [x + 0.026 * side, 0.49, 0], color: acc }, 14));
+        break;
+      case "hoodie":
+      case "raincoat": {
+        const cf = L.style === "hoodie" ? acc : lighter(outfit, 0.35);
+        arm(kit, side, sh, 0.22, 0.047, outfit, 0.052, skin, { sleeve: outfit, sleeveR: 0.066 });
+        kit.add(g, torus(s, 0.047, L.style === "hoodie" ? 0.024 : 0.03, { pos: [x + 0.026 * side, 0.455, 0.002], color: cf }, 14));
+        break;
+      }
+    }
+  }
+
+  /* ---- legs + boots ---- */
+  for (const side of [-1, 1] as const) {
+    const x = 0.08 * side;
+    const g = side > 0 ? "legR" : "legL";
+    kit.add(g, capsule(s, 0.24, 0.058, { pos: [x, 0.2, 0], color: legCol, bottom: darker(legCol, 0.1) }));
+    if (L.style === "raincoat") {
+      // tall wellies
+      kit.add(g, softCyl(s, 0.12, 0.066, 0.064, { pos: [x, 0.04, 0.0], color: boot, bottom: darker(boot, 0.12) }, 0.02, 14));
+      kit.add(g, softBox(s, 0.12, 0.08, 0.17, { pos: [x, 0.045, 0.025], color: boot, bottom: darker(boot, 0.14) }, 0.04));
+      kit.add(g, softBox(s, 0.125, 0.025, 0.175, { pos: [x, 0.014, 0.027], color: darker(boot, 0.25) }, 0.012));
+      kit.add(g, torus(s, 0.066, 0.024, { pos: [x, 0.165, 0.0], color: lighter(boot, 0.3) }, 14));
+    } else {
+      kit.add(g, softBox(s, 0.115, 0.1, 0.16, { pos: [x, 0.06, 0.02], color: boot, bottom: darker(boot, 0.1) }, 0.045));
+      kit.add(g, softBox(s, 0.12, 0.025, 0.165, { pos: [x, 0.014, 0.022], color: "#fff0dc" }, 0.012));
+      kit.add(g, torus(s, 0.054, 0.022, { pos: [x, 0.11, 0.01], color: lighter(boot, 0.15) }, 14));
+    }
+    if (cuff) kit.add(g, torus(s, 0.06, 0.03, { pos: [x, 0.145, 0], color: cuff, bottom: darker(cuff, 0.06) }, 14));
+    if (L.style === "dress") kit.add(g, torus(s, 0.058, 0.02, { pos: [x, 0.125, 0.005], color: "#fffaf4" }, 14));
+  }
+
+  /* ---- hood (worn up when there's no hat) ---- */
+  if (hoodUp) playerHood(kit, outfit, acc);
+  return prof;
+}
+
+/** Hood framing the face, accent lining and cat-ear nubs (head group). */
+function playerHood(kit: Kit, outfit: string, acc: string) {
+  const s = kit.scene;
+  const HC: V3 = [0, 0.985, -0.07],
+    HR: V3 = [0.345, 0.33, 0.33];
+  kit.add("head", blob(s, HR[0], HR[1], HR[2], { pos: HC, color: outfit, bottom: darker(outfit, 0.08) }, 18));
+  // lining rim around the face opening, following the hood surface
+  const rim: V3[] = [];
+  for (let i = 0; i <= 22; i++) {
+    const ph = ((-128 + (256 * i) / 22) * Math.PI) / 180;
+    const x = Math.sin(ph) * 0.255,
+      y = 0.935 + Math.cos(ph) * 0.27;
+    const q = 1 - (x / HR[0]) ** 2 - ((y - HC[1]) / HR[1]) ** 2;
+    rim.push([x, y, HC[2] + HR[2] * Math.sqrt(Math.max(0.02, q)) + 0.004]);
+  }
+  kit.add("head", tube(s, rim, 0.034, { color: acc }, 8));
+  // ear nubs
+  for (const side of [-1, 1]) {
+    const p = placeOn(HC, HR, 40 * side, 50, -0.03);
+    kit.add(
+      "head",
+      group(
+        [cone(s, 0.13, 0.075, { color: outfit, bottom: darker(outfit, 0.05), scale: [1, 1, 0.55] }, 10), cone(s, 0.08, 0.042, { pos: [0, 0.012, 0.03], color: acc, scale: [1, 1, 0.4] }, 8)],
+        { pos: p.pos, rot: [-0.2, 0.3 * side, -0.5 * side] },
+      ),
+    );
+  }
+}
+
+/** Cross-body satchel (the default bag). */
+function satchel(kit: Kit, prof: [number, number][]) {
+  const s = kit.scene;
+  kit.add("body", tube(s, wrapBand(prof, 0.47, 0.72, 0.012, 30), 0.016, { color: "#c99a6b" }, 5));
   const bagCol = "#f2c98e";
+  const a = -0.87;
+  const r = Math.max(0.177, profileRadius(prof, 0.3) + 0.04);
   const bag = group(
     [
       softBox(s, 0.15, 0.12, 0.065, { color: bagCol, bottom: darker(bagCol, 0.08) }, 0.03),
       softBox(s, 0.155, 0.075, 0.03, { pos: [0, 0.028, 0.025], rot: [0.12, 0, 0], color: "#d9a36c" }, 0.014),
       heart(s, 0.05, "#f47a9a", { pos: [0, 0.0, 0.048] }),
     ],
-    { pos: [-0.135, 0.3, 0.115], rot: [0, -0.55, 0.05] },
+    { pos: [Math.sin(a) * r, 0.3, Math.cos(a) * r], rot: [0, -0.55, 0.05] },
   );
   kit.add("body", bag);
+}
 
-  /* ---- arms ---- */
-  for (const side of [-1, 1] as const) {
-    arm(kit, side, [0.15, 0.6, 0], 0.22, 0.042, skin, 0.052, skin, { sleeve: shirt, sleeveR: 0.066 });
+function playerAccessory(kit: Kit, L: Required<PlayerLook>, prof: [number, number][], hoodUp: boolean, nodes: PlayerNodes) {
+  const s = kit.scene;
+  const c = L.accessoryColor;
+  const R = (y: number) => profileRadius(prof, y);
+  switch (L.accessory) {
+    case "none":
+      return;
+    case "scarf": {
+      kit.add("body", tube(s, wrapBand(prof, 0.665, 0, 0.022, 26), 0.036, { color: c, bottom: darker(c, 0.06) }, 8));
+      kit.add("body", tube(s, wrapBand(prof, 0.625, 0.14, 0.03, 26), 0.033, { color: c, bottom: darker(c, 0.08) }, 8));
+      const k = SCARF_PIVOT;
+      const kz = Math.max(k[2], R(k[1]) + 0.03);
+      kit.add("body", ball(s, 0.042, { pos: [k[0], k[1], kz], color: c, bottom: darker(c, 0.06) }, 10));
+      // hanging tail end with stripes + fringe (springy)
+      const len = 0.19;
+      const tail: Mesh[] = [softBox(s, 0.078, len, 0.026, { pos: [0, -len / 2, 0], color: c, bottom: darker(c, 0.08) }, 0.012)];
+      for (const y of [-0.1, -0.135]) tail.push(softBox(s, 0.081, 0.016, 0.028, { pos: [0, y, 0], color: lighter(c, 0.6) }, 0.007));
+      for (let i = 0; i < 4; i++) tail.push(capsule(s, 0.04, 0.0075, { pos: [-0.027 + i * 0.018, -len - 0.012, 0], color: lighter(c, 0.25) }));
+      const rx = -Math.atan2(Math.max(0.03, R(k[1] - len) + 0.03 - kz + 0.02), len);
+      kit.add("scarfTail", group(tail, { pos: [k[0], k[1] - 0.01, kz + 0.008], rot: [rx, 0, 0.12] }));
+      return;
+    }
+    case "bow": {
+      // on the hood, high on the hair, or tucked by the ear when a hat is in the way
+      const hatClear = L.hat === "none" || L.hat === "flower";
+      const E: Ell = hoodUp ? { c: [0, 0.985, -0.07], r: [0.345, 0.33, 0.33] } : { c: [0, 0.975, -0.04], r: [0.31, 0.295, 0.295] };
+      const p = hatClear ? placeOn(E.c, E.r, -40, 46, -0.01) : placeOn(E.c, E.r, -74, 8, -0.005);
+      const tilt = hatClear ? 0.45 : 0.15;
+      const parts: Mesh[] = [];
+      for (const side of [-1, 1]) {
+        parts.push(blob(s, 0.075, 0.056, 0.032, { pos: [0.068 * side, 0.004, 0], rot: [0, 0, 0.32 * side], color: c, bottom: darker(c, 0.1) }, 10));
+        parts.push(ball(s, 0.022, { pos: [0.07 * side, 0.004, 0.026], color: darker(c, 0.12), scale: [1.2, 1, 0.5] }, 6));
+        parts.push(blob(s, 0.02, 0.05, 0.014, { pos: [0.025 * side, -0.05, 0.004], rot: [0, 0, 0.35 * side], color: c }, 6));
+      }
+      parts.push(blob(s, 0.03, 0.032, 0.026, { pos: [0, 0, 0.012], color: lighter(c, 0.15) }, 8));
+      kit.add("hat", group(parts, { pos: p.pos, rot: [p.rot[0] * 0.5, p.rot[1] * 0.6, tilt], scale: 1.05 }));
+      return;
+    }
+    case "cape": {
+      let rb = 0;
+      for (let y = 0.36; y <= 0.66; y += 0.02) rb = Math.max(rb, R(y));
+      const cape = shell(s, { yTop: 0.675, yBot: 0.35, rTop: R(0.66) + 0.04, rBot: rb + 0.085, arc: 1.12, thick: 0.022, lobes: 5, lobeDepth: 0.045, nu: 30, nv: 7 }, { color: c, bottom: darker(c, 0.12) });
+      // puffy collar roll along the top edge
+      const roll: V3[] = [];
+      const rt = R(0.66) + 0.045;
+      for (let i = 0; i <= 14; i++) {
+        const a = -1.2 + (2.4 * i) / 14;
+        roll.push([Math.sin(a) * rt, 0.678, -Math.cos(a) * rt]);
+      }
+      kit.add("cape", cape, tube(s, roll, 0.024, { color: lighter(c, 0.35) }, 6));
+      // ties to a heart clasp under the chin (static on the body)
+      const fz = R(0.635) + 0.025;
+      for (const side of [-1, 1]) kit.add("body", tube(s, bez([Math.sin(1.1 * side) * rt, 0.675, -Math.cos(1.1) * rt], [0.085 * side, 0.665, fz * 0.75], [0.02 * side, 0.64, fz], 6), 0.013, { color: lighter(c, 0.35) }, 4));
+      kit.add("body", heart(s, 0.05, "#ffd45e", { pos: [0, 0.635, fz + 0.006], rot: [-0.25, 0, 0] }));
+      return;
+    }
+    case "backpack": {
+      const by = 0.44;
+      const bz = -(R(by) + 0.08);
+      const parts: Mesh[] = [
+        blob(s, 0.145, 0.15, 0.09, { color: c, bottom: darker(c, 0.12) }, 14),
+        blob(s, 0.1, 0.075, 0.04, { pos: [0, -0.045, -0.07], color: lighter(c, 0.3), bottom: lighter(c, 0.15) }, 10),
+        heart(s, 0.085, "#f47a9a", { pos: [0, -0.035, -0.112], rot: [0.15, Math.PI, 0] }),
+      ];
+      for (const side of [-1, 1]) {
+        parts.push(ball(s, 0.042, { pos: [0.085 * side, 0.13, 0], color: c, scale: [1, 1, 0.7] }, 8));
+        parts.push(ball(s, 0.022, { pos: [0.085 * side, 0.135, -0.022], color: lighter(c, 0.4), scale: [1, 1, 0.5] }, 6));
+      }
+      kit.add("body", group(parts, { pos: [0, by, bz], rot: [-0.08, 0, 0] }));
+      // shoulder straps
+      const strap = darker(c, 0.22);
+      for (const side of [-1, 1]) {
+        const x = 0.085 * side;
+        const zf = (y: number, g: number) => Math.sqrt(Math.max(0, R(y) ** 2 - x * x)) + g;
+        const pts: V3[] = [
+          [x, 0.52, bz + 0.06],
+          [x, 0.62, -zf(0.62, 0.02)],
+          [x * 1.1, 0.7, -0.01],
+          [x * 1.1, 0.64, zf(0.64, 0.016)],
+          [x * 1.05, 0.52, zf(0.52, 0.014)],
+          [x, 0.42, zf(0.42, 0.014)],
+        ];
+        kit.add("body", tube(s, pts, 0.016, { color: strap }, 5));
+      }
+      return;
+    }
   }
-
-  /* ---- legs + boots ---- */
-  const boot = "#a8727c";
-  for (const side of [-1, 1] as const) {
-    const x = 0.08 * side;
-    const g = side > 0 ? "legR" : "legL";
-    kit.add(g, capsule(s, 0.24, 0.058, { pos: [x, 0.2, 0], color: outfit, bottom: darker(outfit, 0.1) }));
-    kit.add(g, softBox(s, 0.115, 0.1, 0.16, { pos: [x, 0.06, 0.02], color: boot, bottom: darker(boot, 0.1) }, 0.045));
-    kit.add(g, softBox(s, 0.12, 0.025, 0.165, { pos: [x, 0.014, 0.022], color: "#fff0dc" }, 0.012));
-    kit.add(g, torus(s, 0.054, 0.022, { pos: [x, 0.11, 0.01], color: lighter(boot, 0.15) }, 14));
-  }
-
-  /* ---- hat ---- */
-  playerHat(kit, look.hat);
 }
 
 function playerHat(kit: Kit, hat: HatId) {
@@ -427,7 +839,31 @@ function playerHat(kit: Kit, hat: HatId) {
       kit.add("hat", group(parts, { pos: [0.02, 1.235, -0.02], rot: [-0.1, 0, -0.12], scale: 1.15 }));
       return;
     }
+    case "chef": {
+      kit.add("hat", group(chefToque(s, 0.14, 0.2, "#fffdf8"), { pos: [0.015, 1.215, -0.035], rot: [-0.14, 0, -0.1] }));
+      return;
+    }
   }
+}
+
+/** Chef's toque: band + puffy pleated crown. Origin at the band's base. */
+function chefToque(s: Scene, r: number, h: number, white: ColorLike): Mesh[] {
+  const sh = "#ece4f2";
+  const bandH = h * 0.4;
+  const parts: Mesh[] = [softCyl(s, bandH, r, r * 0.97, { color: white, bottom: sh }, r * 0.12, 18)];
+  // pleat lines on the band
+  for (let i = 0; i < 8; i++) {
+    const a = ((i + 0.5) / 8) * Math.PI * 2;
+    parts.push(capsule(s, bandH * 0.8, r * 0.05, { pos: [Math.sin(a) * r * 0.985, bandH * 0.5, Math.cos(a) * r * 0.985], color: "#f4eef8" }));
+  }
+  // puffs
+  const N = 6;
+  for (let i = 0; i < N; i++) {
+    const a = (i / N) * Math.PI * 2;
+    parts.push(blob(s, r * 0.62, h * 0.38, r * 0.62, { pos: [Math.sin(a) * r * 0.62, bandH + h * 0.28, Math.cos(a) * r * 0.62], color: white, bottom: sh }, 10));
+  }
+  parts.push(blob(s, r * 0.85, h * 0.42, r * 0.85, { pos: [0, bandH + h * 0.4, 0], color: white, bottom: sh }, 12));
+  return parts;
 }
 
 /* ------------------------------------------------------------------ */
@@ -452,6 +888,8 @@ export function buildNpc(scene: Scene, id: NpcId): CharacterModel {
       return buildBramble(scene);
     case "marina":
       return buildMarina(scene);
+    case "mocha":
+      return buildMocha(scene);
   }
 }
 
@@ -1396,4 +1834,215 @@ function buildMarina(scene: Scene): CharacterModel {
   return rig;
 }
 
+/* ---------- Mocha: round tabby cat baker ---------- */
 
+function buildMocha(scene: Scene): CharacterModel {
+  const fur = "#f8e2c0",
+    caramel = "#e3a46c",
+    mocha = "#9c6a50",
+    light = "#fffaf0",
+    pink = "#f7a8bd",
+    apron = "#fffdf8",
+    kerchief = "#f58fae";
+  const H: Ell = { c: [0, 0.76, 0.01], r: [0.27, 0.228, 0.225] };
+  const M: Ell = { c: [0, 0.69, 0.185], r: [0.088, 0.058, 0.06] };
+  const E: EyeOpts = { yaw: 29, pitch: 4, rx: 0.031, ry: 0.043 };
+  const BC: V3 = [0, 0.33, 0],
+    BR: V3 = [0.24, 0.255, 0.235];
+  const bodyP = ellProfile(BC[1], BR[0], BR[1]);
+  const rig = new Rig(
+    scene,
+    {
+      name: "mocha",
+      height: 1.15,
+      hipY: 0.22,
+      neck: [0, 0.55, 0],
+      headY: H.c[1],
+      eyes: eyeCentre(H, E),
+      mouth: mouthPivot(M, -24, 0.02),
+      shoulder: [0.2, 0.47, 0],
+      hip: [0.1, 0.17, 0],
+      persona: { walkFreq: 1.5, runFreq: 2.4, stride: 0.5, bob: 0.045, breathe: 0.02, sway: 0.035, idleBounce: 0.006, headTilt: 0.09, glance: 0.5, armRestZ: 0.3, hop: 0.24 },
+    },
+    109,
+  );
+  const kit = new Kit(scene, rig);
+  stdGroups(kit, rig);
+  const s = scene;
+
+  /* body: round tummy, tabby stripes on the back, apron, neckerchief */
+  kit.add("body", lathe(s, bodyP, { color: fur, bottom: mixCol(fur, caramel, 0.45) }, 18));
+  for (const [yw, pt, w, h] of [
+    [150, 20, 0.03, 0.09],
+    [180, 25, 0.03, 0.1],
+    [-150, 20, 0.03, 0.09],
+    [125, 0, 0.026, 0.075],
+    [-125, 0, 0.026, 0.075],
+  ] as [number, number, number, number][]) {
+    const p = placeOn(BC, BR, yw, pt, -0.008);
+    kit.add("body", blob(s, w, h, 0.02, { pos: p.pos, rot: p.rot, color: caramel }, 8));
+  }
+  // mocha patch on the back
+  const bp = placeOn(BC, BR, -165, -20, -0.01);
+  kit.add("body", blob(s, 0.1, 0.08, 0.025, { pos: bp.pos, rot: bp.rot, color: mocha }, 10));
+  // apron: skirt, bib, waist ties, heart pocket
+  kit.add("body", blob(s, 0.165, 0.165, 0.06, { pos: [0, 0.27, 0.198], rot: [-0.1, 0, 0], color: apron, bottom: darker(apron, 0.07) }, 14));
+  kit.add("body", blob(s, 0.11, 0.085, 0.03, { pos: [0, 0.445, 0.19], rot: [-0.62, 0, 0], color: apron }, 12));
+  kit.add("body", tube(s, wrapBand(bodyP, 0.375, 0, 0.008, 26), 0.014, { color: apron }, 5));
+  for (const side of [-1, 1]) kit.add("body", blob(s, 0.055, 0.03, 0.02, { pos: [0.045 * side, 0.385, -0.225], rot: [0, 0, -0.55 * side], color: apron }, 8));
+  kit.add("body", ball(s, 0.02, { pos: [0, 0.385, -0.235], color: apron }, 6));
+  // scalloped pink hem
+  for (let i = 0; i < 7; i++) {
+    const a = (-57 + i * 19) * (Math.PI / 180);
+    kit.add("body", blob(s, 0.03, 0.02, 0.016, { pos: [Math.sin(a) * 0.155, 0.122 + (1 - Math.cos(a)) * 0.05, 0.2 + Math.cos(a) * 0.045], rot: [-0.3, a, 0], color: "#ffd3df" }, 6));
+  }
+  kit.add("body", heart(s, 0.085, "#f8b9cb", { pos: [0.055, 0.255, 0.258], rot: [-0.1, 0.2, 0] }));
+  kit.add("body", tube(s, [[0.022, 0.282, 0.27], [0.088, 0.282, 0.257]], 0.0055, { color: "#fff0f5" }, 4));
+  kit.add("body", flower(s, 0.017, "#ffe066", "#ffffff", { pos: [-0.06, 0.455, 0.214], rot: [-0.62, 0, 0] }));
+  // striped neckerchief: band + front triangle with stripes
+  kit.add("body", tube(s, wrapBand(bodyP, 0.548, 0, 0.026, 22), 0.028, { color: kerchief }, 7));
+  const kt = 0.8,
+    kl = 0.15,
+    k0: V3 = [0, 0.57, 0.125];
+  kit.add("body", cone(s, kl, 0.09, { pos: k0, rot: [Math.PI - kt, 0, 0], color: kerchief, bottom: darker(kerchief, 0.06), scale: [1, 1, 0.42] }, 12));
+  for (const [t, w] of [
+    [0.32, 0.058],
+    [0.6, 0.034],
+  ]) {
+    // stripes across the triangle (t = fraction down its length)
+    const y = k0[1] - kl * t * Math.cos(kt),
+      z = k0[2] + kl * t * Math.sin(kt) + 0.038 * (1 - t) * Math.cos(kt) + 0.004;
+    kit.add("body", tube(s, [[-w, y + 0.006, z - 0.008], [0, y, z], [w, y + 0.006, z - 0.008]], 0.0075, { color: "#fff6fa" }, 4));
+  }
+  kit.add("body", ball(s, 0.03, { pos: [0, 0.555, 0.15], color: darker(kerchief, 0.08) }, 8));
+  for (let i = 0; i < 10; i++) {
+    // white stripes around the band
+    const a = (i / 10) * Math.PI * 2 + 0.3;
+    const r = profileRadius(bodyP, 0.548) + 0.03;
+    kit.add("body", ball(s, 0.016, { pos: [Math.sin(a) * r, 0.548, Math.cos(a) * r], color: "#fff6fa", scale: [1, 1.7, 1] }, 6));
+  }
+
+  /* curly tail */
+  const tailN = appendage(rig, kit, "tail", "body", [0, 0.17, -0.2]);
+  const tp: V3[] = [...bez([0, 0.17, -0.2], [0, 0.08, -0.42], [0, 0.3, -0.46], 7)];
+  const cc: V3 = [0, 0.38, -0.4];
+  const r0 = Math.hypot(tp[tp.length - 1][1] - cc[1], tp[tp.length - 1][2] - cc[2]);
+  const a0 = Math.atan2(tp[tp.length - 1][1] - cc[1], tp[tp.length - 1][2] - cc[2]);
+  for (let i = 1; i <= 9; i++) {
+    const t = i / 9;
+    const a = a0 + t * Math.PI * 1.45;
+    const r = r0 * (1 - 0.55 * t);
+    tp.push([0.012 * i, cc[1] + Math.sin(a) * r, cc[2] + Math.cos(a) * r]);
+  }
+  kit.add("tail", tube(s, tp, 0.036, { color: caramel, bottom: darker(caramel, 0.06) }, 8, (u) => 1 - u * 0.35));
+  for (const u of [0.2, 0.38, 0.56]) {
+    // mocha stripe rings, perpendicular to the tail
+    const i = Math.round(u * (tp.length - 1));
+    const p = tp[i],
+      a = tp[i - 1],
+      b = tp[i + 1];
+    const th = Math.atan2(b[2] - a[2], b[1] - a[1]);
+    kit.add("tail", torus(s, 0.036 * (1 - u * 0.35) - 0.002, 0.022, { pos: p, rot: [th, 0, 0], color: mocha }, 12));
+  }
+  kit.add("tail", ball(s, 0.03, { pos: tp[tp.length - 1], color: fur }, 8));
+  rig.addSecondary({ node: tailN, axis: "z", k: 45, d: 3, wagAmp: 0.16, wagFreq: 0.9, gyaw: -0.25, min: -0.6, max: 0.6 });
+  rig.addSecondary({ node: tailN, axis: "x", k: 55, d: 3.5, gy: 0.01, gspeed: 0.2, min: -0.35, max: 0.45 });
+
+  /* head */
+  kit.add("head", blob(s, H.r[0], H.r[1], H.r[2], { pos: H.c, color: fur, bottom: darker(fur, 0.04) }, 16));
+  // fluffy cheek tufts
+  for (const side of [-1, 1]) {
+    const cp = placeOn(H.c, H.r, 80 * side, -30, -0.03);
+    kit.add("head", blob(s, 0.07, 0.05, 0.06, { pos: cp.pos, rot: [0, 0, -0.45 * side], color: fur }, 8));
+  }
+  // mocha patch around the left eye, tabby stripes on the forehead & cheeks
+  const pe = placeOn(H.c, H.r, -E.yaw - 4, E.pitch + 5, -0.008);
+  kit.add("head", blob(s, 0.082, 0.072, 0.012, { pos: pe.pos, rot: [pe.rot[0], pe.rot[1], 0.3], color: mocha }, 10));
+  for (const [yw, pt, l] of [
+    [-11, 36, 0.042],
+    [0, 39, 0.05],
+    [11, 36, 0.042],
+  ] as [number, number, number][]) {
+    const p = placeOn(H.c, H.r, yw, pt, -0.005);
+    kit.add("face", blob(s, 0.011, l, 0.006, { pos: p.pos, rot: [p.rot[0], p.rot[1], -yw * 0.012], color: caramel }, 6));
+  }
+  for (const side of [-1, 1]) {
+    for (const pt of [-4, -14]) {
+      const p = placeOn(H.c, H.r, 70 * side, pt, -0.004);
+      kit.add("face", blob(s, 0.035, 0.009, 0.006, { pos: p.pos, rot: [p.rot[0], p.rot[1], 0.15 * side * (pt + 9) * 0.1], color: caramel }, 6));
+    }
+  }
+  for (const [yw, pt] of [
+    [165, 25],
+    [180, 30],
+    [-165, 25],
+    [180, 5],
+  ] as [number, number][]) {
+    const p = placeOn(H.c, H.r, yw, pt, -0.006);
+    kit.add("head", blob(s, 0.014, 0.06, 0.008, { pos: p.pos, rot: p.rot, color: caramel }, 6));
+  }
+  kit.add("head", blob(s, M.r[0], M.r[1], M.r[2], { pos: M.c, color: light }, 12));
+  const nz = placeOn(M.c, M.r, 0, 34, -0.006);
+  kit.add("head", group([cone(s, 0.03, 0.022, { color: "#f58fa6", scale: [1.2, 1, 0.6] }, 8)], { pos: nz.pos, rot: [Math.PI + nz.rot[0] * 0.5, 0, 0] }));
+  addEyes(kit, "eyes", H, E);
+  cheeks(kit, "face", H, 45, -14, 0.042, 0.026);
+  wMouth(kit, "face", M, -12, 24, 18, 0.006);
+  openMouth(kit, M, -24, 0.028, 0.02);
+  whiskers(kit, "face", M, "#b08a7a", 0.1, 2);
+  // flour dusting on the right cheek and the nose
+  for (const [yw, pt, r] of [
+    [50, -2, 0.02],
+    [58, -9, 0.014],
+    [44, -10, 0.011],
+    [62, 2, 0.009],
+  ] as [number, number, number][]) {
+    const p = placeOn(H.c, H.r, yw, pt, 0.0);
+    kit.add("face", blob(s, r, r * 0.8, 0.006, { pos: p.pos, rot: p.rot, color: "#ffffff" }, 6));
+  }
+  const fl = placeOn(M.c, M.r, 14, 20, 0.0);
+  kit.add("face", blob(s, 0.011, 0.009, 0.005, { pos: fl.pos, rot: fl.rot, color: "#ffffff" }, 6));
+
+  // tall chef's toque
+  kit.add("head", group(chefToque(s, 0.15, 0.25, "#fffdf8"), { pos: [0.02, 0.935, -0.02], rot: [-0.08, 0, -0.09] }));
+
+  /* ears (one mocha, one caramel) */
+  for (const side of [-1, 1] as const) {
+    const name = side > 0 ? "earR" : "earL";
+    const ep = placeOn(H.c, H.r, 47 * side, 38, -0.03);
+    const piv: V3 = ep.pos;
+    const n = appendage(rig, kit, name, "head", piv);
+    const c = side < 0 ? mocha : caramel;
+    kit.add(
+      name,
+      group(
+        [
+          cone(s, 0.15, 0.085, { color: c, bottom: darker(c, 0.04), scale: [1, 1, 0.5] }, 12),
+          cone(s, 0.1, 0.05, { pos: [0, 0.012, 0.03], color: pink, scale: [1, 1, 0.35] }, 10),
+        ],
+        { pos: piv, rot: [-0.1, 0.25 * side, -0.42 * side] },
+      ),
+    );
+    rig.addSecondary({ node: n, axis: "z", k: 110, d: 6, gy: 0.007 * side, gyaw: 0.08, twitch: 0.18, twitchAmp: 4, min: -0.4, max: 0.4 });
+  }
+
+  /* paws, whisk */
+  for (const side of [-1, 1] as const) {
+    arm(kit, side, [0.2, 0.47, 0], 0.16, 0.046, fur, 0.054, light);
+    leg(kit, side, [0.1, 0.17, 0], 0.055, fur, { rx: 0.07, ry: 0.045, rz: 0.09, color: light, z: 0.03 });
+    // caramel stripe bands on the arms
+    kit.add(side > 0 ? "armR" : "armL", torus(s, 0.046, 0.014, { pos: [0.22 * side, 0.42, 0], color: caramel }, 12));
+  }
+  // whisk in the right paw
+  const wires: Mesh[] = [softCyl(s, 0.11, 0.013, 0.015, { pos: [0, -0.1, 0], color: "#f3c89a", bottom: "#d9a36c" }, 0.006, 8)];
+  for (let i = 0; i < 3; i++) {
+    const loop: V3[] = [];
+    for (let k = 0; k <= 12; k++) {
+      const t = (k / 12) * Math.PI;
+      loop.push([Math.cos(t) * 0.038, 0.01 + Math.sin(t) * 0.11, 0]);
+    }
+    wires.push(group([tube(s, loop, 0.004, { color: "#c9c6d8" }, 4)], { rot: [0, (i / 3) * Math.PI, 0] }));
+  }
+  kit.add("armR", group(wires, { pos: [0.245, 0.37, 0.07], rot: [0.55, 0, -0.25] }));
+  kit.build();
+  return rig;
+}

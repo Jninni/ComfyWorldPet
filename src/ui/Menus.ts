@@ -6,6 +6,7 @@ import { hasSave, clearSave, PARTY_MAX } from "../core/State";
 import { SPECIES, SPECIES_IDS, ZONE_INFO } from "../data/species";
 import { RESOURCES, KEY_ITEMS, BUILDABLES, type BuildableId, type ResourceId } from "../data/items";
 import { QUESTS } from "../game/Story";
+import { FOODS, INGREDIENTS, DYES, PATTERNS, type FoodId, type IngredientId, type DyeId } from "../data/crafting";
 import { LOOK_OPTIONS, NPC_INFO, type PlayerLook, type HatId } from "../entities/characterModels";
 import { WORLD, ZONE_SHAPES, PATHS, POND, LOC, walkField } from "../world/layout";
 
@@ -345,6 +346,7 @@ function renderTab(g: Game, tab: Tab, rerender: () => void): HTMLElement {
             h(".portrait", null, portrait(c.species, info.color, 128)),
             h(".nm", null, c.name),
             h(".sub", null, c.inParty ? "🐾 In party" : "🏡 In Haven"),
+            h(".hearts", { title: "Friendship — share treats to fill it!" }, "💗".repeat(Math.min(5, c.friendship ?? 1)) + "🤍".repeat(Math.max(0, 5 - (c.friendship ?? 1)))),
             c.variant ? h(".badge", null, "✨ rare") : null,
           ),
         );
@@ -353,17 +355,79 @@ function renderTab(g: Game, tab: Tab, rerender: () => void): HTMLElement {
       return wrap;
     }
     case "bag": {
-      const grid = h(".grid");
-      for (const id of Object.keys(RESOURCES) as ResourceId[]) {
-        const r = RESOURCES[id];
-        grid.append(h(".card", { "data-nav": "" }, h("div", { style: { fontSize: "44px" } }, r.icon), h(".nm", null, `${r.name} ×${s.resources[id]}`), h(".sub", null, r.desc)));
+      const wrap = h("div");
+      const card = (icon: string, name: string, sub: string, extra?: HTMLElement | null, bg?: string) =>
+        h(".card", { "data-nav": "", style: bg ? { background: bg } : undefined }, h("div", { style: { fontSize: "40px" } }, icon), h(".nm", null, name), h(".sub", null, sub), extra ?? null);
+      // food first: it has buttons
+      const foods = (Object.keys(FOODS) as FoodId[]).filter((f) => g.count(f) > 0);
+      if (foods.length) {
+        wrap.append(h(".section-title", null, "🍰 Food & Treats"));
+        const grid = h(".grid");
+        for (const f of foods) {
+          const info = FOODS[f];
+          const act =
+            info.use === "keep"
+              ? null
+              : h(
+                  ".food-actions",
+                  null,
+                  h(
+                    "button.btn",
+                    {
+                      "data-nav": "",
+                      "--c": info.use === "eat" ? "var(--butter)" : "var(--pink)",
+                      onclick: async (e: Event) => {
+                        e.stopPropagation();
+                        if (info.use === "eat") await g.life.eat(f);
+                        else await g.life.share(f);
+                        rerender();
+                      },
+                    },
+                    info.use === "eat" ? "🍴 Eat" : "🐾 Share",
+                  ),
+                );
+          grid.append(card(info.icon, `${info.name} ×${g.count(f)}`, info.desc, act, "var(--butter-l, #fff6d6)"));
+        }
+        wrap.append(grid);
       }
-      for (const [id, k] of Object.entries(KEY_ITEMS)) {
-        const n = s.keyItems[id] ?? 0;
-        if (!n) continue;
-        grid.append(h(".card", { "data-nav": "", style: { background: "var(--lilac, #f1eaff)" } }, h("div", { style: { fontSize: "44px" } }, k.icon), h(".nm", null, n > 1 ? `${k.name} ×${n}` : k.name), h(".sub", null, k.desc)));
+      wrap.append(h(".section-title", null, "🧺 Materials"));
+      const mats = h(".grid");
+      for (const id of Object.keys(RESOURCES) as ResourceId[]) mats.append(card(RESOURCES[id].icon, `${RESOURCES[id].name} ×${s.resources[id]}`, RESOURCES[id].desc));
+      wrap.append(mats);
+      const ings = (Object.keys(INGREDIENTS) as IngredientId[]).filter((i) => (s.ingredients[i] ?? 0) > 0 || s.skills.cooking);
+      if (ings.length) {
+        wrap.append(h(".section-title", null, "🥕 Ingredients"));
+        const grid = h(".grid");
+        for (const i of ings) grid.append(card(INGREDIENTS[i].icon, `${INGREDIENTS[i].name} ×${s.ingredients[i] ?? 0}`, INGREDIENTS[i].where));
+        wrap.append(grid);
       }
-      return grid;
+      const dyes = (Object.keys(DYES) as DyeId[]).filter((d) => (s.dyes[d] ?? 0) > 0 || s.quests.sewing);
+      if (dyes.length) {
+        wrap.append(h(".section-title", null, "🌼 Dye Flowers"));
+        const grid = h(".grid");
+        for (const d of dyes)
+          grid.append(
+            h(
+              ".card",
+              { "data-nav": "" },
+              h("div", { style: { width: "48px", height: "48px", margin: "0 auto 4px", borderRadius: "50%", border: "3px solid var(--ink)", background: DYES[d].color } }),
+              h(".nm", null, `${DYES[d].name} ×${s.dyes[d] ?? 0}`),
+              h(".sub", null, DYES[d].where),
+            ),
+          );
+        wrap.append(grid);
+      }
+      const keys = Object.entries(KEY_ITEMS).filter(([id]) => (s.keyItems[id] ?? 0) > 0);
+      if (keys.length) {
+        wrap.append(h(".section-title", null, "⭐ Special Items"));
+        const grid = h(".grid");
+        for (const [id, k] of keys) {
+          const n = s.keyItems[id] ?? 0;
+          grid.append(card(k.icon, n > 1 ? `${k.name} ×${n}` : k.name, k.desc, null, "var(--lilac, #f1eaff)"));
+        }
+        wrap.append(grid);
+      }
+      return wrap;
     }
     case "map":
       return h(".map-wrap", null, drawMap(g));
@@ -388,7 +452,7 @@ function renderTab(g: Game, tab: Tab, rerender: () => void): HTMLElement {
         return h(".opt-row", null, h(".lbl", { style: { fontWeight: "600" } }, label), sw);
       };
       const hats = h(".swatches");
-      const HAT_ICON: Record<string, string> = { none: "🚫", beret: "🎨", flower: "🌸", bunnyears: "🐰", strawhat: "👒", crown: "👑" };
+      const HAT_ICON: Record<string, string> = { none: "🚫", beret: "🎨", flower: "🌸", bunnyears: "🐰", strawhat: "👒", crown: "👑", chef: "👨‍🍳" };
       for (const hat of LOOK_OPTIONS.hat) {
         const owned = s.hats.includes(hat);
         hats.append(
@@ -410,7 +474,51 @@ function renderTab(g: Game, tab: Tab, rerender: () => void): HTMLElement {
           ),
         );
       }
-      wrap.append(opt("Skin", "skin"), opt("Hair", "hair"), opt("Outfit", "outfit"), h(".opt-row", null, h(".lbl", { style: { fontWeight: "600" } }, "Hats (earn more by helping villagers!)"), hats));
+      g.life.ensureStarterWardrobe();
+      const outfits = h(".swatches");
+      const accs = h(".swatches");
+      accs.append(
+        h(
+          "button.swatch" + (!look.accessory || look.accessory === "none" ? ".sel" : ""),
+          {
+            "data-nav": "",
+            "--c": "var(--cream)",
+            title: "No accessory",
+            onclick: () => {
+              g.life.wear(null, "accessory");
+              audio.sfx("click");
+              rerender();
+            },
+          },
+          "🚫",
+        ),
+      );
+      for (const gm of s.wardrobe) {
+        const p = PATTERNS[gm.kind];
+        const worn = p.slot === "outfit" ? (look.style ?? "overalls") === gm.kind && look.outfit === gm.color && (look.outfit2 ?? "#fff6e6") === gm.accent : look.accessory === gm.kind && look.accessoryColor === gm.color;
+        const b = h(
+          "button.swatch" + (worn ? ".sel" : ""),
+          {
+            "data-nav": "",
+            title: p.name,
+            style: { background: `linear-gradient(135deg, ${gm.color} 0 62%, ${gm.accent} 62%)`, width: "54px", height: "54px" },
+            onclick: () => {
+              g.life.wear(gm, p.slot);
+              audio.sfx("click");
+              rerender();
+            },
+          },
+          p.icon,
+        );
+        (p.slot === "outfit" ? outfits : accs).append(b);
+      }
+      wrap.append(
+        opt("Skin", "skin"),
+        opt("Hair", "hair"),
+        h(".opt-row", null, h(".lbl", { style: { fontWeight: "600" } }, s.skills.sewing ? "Clothes (sew more at Stitch's!)" : "Clothes (Stitch can teach you to sew!)"), outfits),
+        h(".opt-row", null, h(".lbl", { style: { fontWeight: "600" } }, "Accessories"), accs),
+        h(".opt-row", null, h(".lbl", { style: { fontWeight: "600" } }, "Hats (earn more by helping villagers!)"), hats),
+      );
       return wrap;
     }
     case "settings": {
@@ -529,10 +637,12 @@ function drawMap(g: Game): HTMLCanvasElement {
   label("Sparkle Pond", 98, 50);
   label("Critter Haven", 44, -27);
   label("Crystal Cave", -44, 124);
+  c.font = "26px sans-serif";
+  c.fillText("🌱", X(-25.3), Z(-14.5) + 8);
   // houses
   c.font = "26px sans-serif";
   for (const [id, b] of Object.entries(LOC.buildings)) {
-    const icon = { home: "🏠", teahouse: "🫖", library: "📚", flowershop: "🌷", sewing: "🧵", workshop: "🔨" }[id] ?? "🏠";
+    const icon = ({ home: "🏠", teahouse: "🫖", library: "📚", flowershop: "🌷", sewing: "🧵", workshop: "🔨", bakery: "🥐" } as Record<string, string>)[id] ?? "🏠";
     c.fillText(icon, X(b.x), Z(b.z) + 8);
   }
   c.fillText("🕳️", X(LOC.caveMouth.x), Z(LOC.caveMouth.z) + 8);

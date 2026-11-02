@@ -8,9 +8,10 @@ export type SpeciesId =
   | "duckling" // duck – pond
   | "glowbat" // fuzzy bat – cave
   | "molly" // mole – cave
-  | "mochi"; // kitten – village (story)
+  | "mochi" // kitten – village (story)
+  | "redpanda"; // red panda – woods (bakery story)
 
-export const SPECIES_IDS: SpeciesId[] = ["puffbun", "chirpy", "fennix", "hoglet", "shroomy", "ribbit", "duckling", "glowbat", "molly", "mochi"];
+export const SPECIES_IDS: SpeciesId[] = ["puffbun", "chirpy", "fennix", "hoglet", "shroomy", "redpanda", "ribbit", "duckling", "glowbat", "molly", "mochi"];
 
 export type ZoneId = "village" | "meadow" | "woods" | "pond" | "cave";
 export type MinigameKind = "treatToss" | "bubblePop" | "melodyMatch" | "danceAlong";
@@ -109,6 +110,19 @@ export const SPECIES: Record<SpeciesId, SpeciesInfo> = {
     likes: "Rainy days and soft moss",
     talent: "Makes mushrooms sparkle with goodies.",
     names: ["Spot", "Button", "Morel", "Puffcap"],
+  },
+  redpanda: {
+    name: "Rufflepaw",
+    color: "#e8875a",
+    zone: "woods",
+    game: "treatToss",
+    difficulty: 2,
+    temper: "curious",
+    speed: 3.1,
+    desc: "A fluffy red panda with a stripy tail. It has a terrible weakness for pastries!",
+    likes: "Warm muffins and climbing trees",
+    talent: "Sniffs out extra ingredients when you gather food.",
+    names: ["Maple", "Cinnamon", "Toffee", "Pancake"],
   },
   ribbit: {
     name: "Ribbit",

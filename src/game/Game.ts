@@ -11,7 +11,10 @@ import { SPECIES, ZONE_INFO, type SpeciesId, type ZoneId } from "../data/species
 import { RESOURCES, KEY_ITEMS, BUILDABLES, type ResourceId, type BuildableId } from "../data/items";
 import { PlayerCtl, Follower, WildCritter, Npc, type GroundFn } from "./Actors";
 import { Story, QUESTS } from "./Story";
-import { Overworld, type ResourceNode, type Pickup } from "./World";
+import { Life } from "./Life";
+import { openCookMenu, openSewingMenu, openOrdersMenu, chooseSnack } from "../ui/Crafting";
+import { Overworld, type ResourceNode, type Pickup, type NodeKind } from "./World";
+import { INGREDIENTS, FOODS, DYES, type IngredientId, type FoodId, type DyeId, type BuffId } from "../data/crafting";
 import { buildInterior, BUILDING_INFO, type BuildingId } from "../world/buildings";
 import { buildCave } from "../world/cave";
 import { buildBuildable, buildPlotMarker, type BuiltThing } from "./Village";
@@ -58,6 +61,7 @@ export class Game {
   fx: FX;
   state: GameState = newState();
   story: Story;
+  life!: Life;
   world!: Overworld;
   locations = new Map<string, Location>();
   current!: Location;
@@ -193,6 +197,9 @@ export class Game {
     this.current = ow;
     this.placeNpcs();
     this.buildPlots();
+    this.life = new Life(this);
+    this.life.initGarden();
+    this.life.initCrumbs();
     progress(1, "Ready!");
     this.stage.engine.runRenderLoop(() => this.frame());
     (window as unknown as { __game: Game }).__game = this;
@@ -268,6 +275,10 @@ export class Game {
     this.rebuildHaven();
     this.movePipForHide();
     this.refreshPickups();
+    this.life.refreshCrumbs();
+    this.life.ensureStarterWardrobe();
+    this.player.model.setLook?.(this.state.look as PlayerLook);
+    this.ui.setResources(this.state.resources);
     this.refreshNpcMarkers();
     if (this.state.critters.some((c) => c.species === "mochi")) this.locations.get("library")?.wild.forEach((w) => w.species === "mochi" && w.hide());
   }
@@ -347,6 +358,40 @@ export class Game {
           r: 1.8,
           label: "Change style",
           run: () => openPauseMenu(this, "style"),
+        });
+    }
+    if (L.id === "bakery") {
+      const o = spot("oven") ?? spot("counter");
+      if (o)
+        L.interacts.push({
+          id: "oven",
+          pos: o,
+          r: 2,
+          label: "Bake",
+          run: () => this.openOven(),
+        });
+      for (let i = 0; i < 2; i++) {
+        const t = spot("cafe_table_" + i);
+        if (t)
+          L.interacts.push({
+            id: "in_table_" + i,
+            pos: t,
+            r: 1.4,
+            label: "Have a snack",
+            enabled: () => !!this.state.skills.cooking,
+            run: () => this.cafeSnack(),
+          });
+      }
+    }
+    if (L.id === "sewing") {
+      const t = spot("counter");
+      if (t)
+        L.interacts.push({
+          id: "sewing_machine",
+          pos: t,
+          r: 2,
+          label: "Sew",
+          run: () => this.openSewing(),
         });
     }
     if (L.id === "workshop") {
@@ -521,6 +566,7 @@ export class Game {
     // NPCs
     for (const n of this.npcs.values()) if (n.location === L.id) n.update(dt, pp);
     L.update?.(dt, this.time);
+    if (this.mode !== "title") this.life.update(dt);
     this.builtThings.forEach((b) => b?.update?.(dt, this.time));
 
     // zone changes
@@ -655,6 +701,16 @@ export class Game {
       if (cur === "cave") return this.current.def?.spots.treasure ?? null;
       return via("cave", Vector3.Zero());
     }
+    if (t.crumb) {
+      const c = this.life.nextCrumb();
+      return c ? via("overworld", c) : null;
+    }
+    if (t.spot) return via("overworld", new Vector3(t.spot[0], heightAt(t.spot[0], t.spot[1]), t.spot[1]));
+    if (t.building) {
+      const L = this.locations.get(t.building);
+      const inside = t.building === "bakery" ? L?.def?.spots.oven : L?.def?.spots.npc;
+      return via(t.building, inside ?? Vector3.Zero());
+    }
     return null;
   }
 
@@ -778,6 +834,7 @@ export class Game {
       ["flora", "flowershop"],
       ["stitch", "sewing"],
       ["hoot", "library"],
+      ["mocha", "bakery"],
     ];
     for (const [id, b] of inside) {
       const L = this.getLocation(b);
@@ -883,8 +940,10 @@ export class Game {
         await wait(700);
       }
       w.state = "idle";
-      let diff = info.difficulty - (usedCookie ? 1 : 0) - (this.partyHas("chirpy") ? 1 : 0);
-      if (w.species === "mochi") diff = 1;
+      const cozy = this.life.buffActive("cozy");
+      let diff = info.difficulty - (usedCookie ? 1 : 0) - (this.partyHas("chirpy") ? 1 : 0) - (cozy ? 1 : 0);
+      if (cozy) this.life.useCozy();
+      if (w.species === "mochi" || w.id === "thief") diff = 1;
       diff = Math.max(1, Math.min(3, diff));
       this.ui.setHudVisible(false);
       this.ui.setTouchVisible(false);
@@ -909,7 +968,8 @@ export class Game {
       await wait(900);
       const names = info.names.slice().sort(() => Math.random() - 0.5).slice(0, 3);
       let name = names[0];
-      if (w.species !== "mochi") {
+      if (w.id === "thief") name = "Maple";
+      else if (w.species !== "mochi") {
         const pick = await this.ui.say([{ text: `💖 The ${info.name} wants to be your friend! What will you name it?`, choices: names }]);
         name = names[Math.max(0, pick)];
       } else name = "Mochi";
@@ -923,7 +983,7 @@ export class Game {
       };
       this.state.critters.push(owned);
       w.hide();
-      if (w.id !== "mochi_story") w.respawnAt = this.time + 40 + Math.random() * 30;
+      if (w.id !== "mochi_story" && w.id !== "thief") w.respawnAt = this.time + 40 + Math.random() * 30;
       this.fx.puff(w.pos.add(new Vector3(0, 0.4, 0)), 10, "#ffe6f0");
       this.rebuildFollowers();
       this.rebuildHaven();
@@ -932,7 +992,8 @@ export class Game {
           text: owned.inParty ? `*${name}* joined your party! 🐾` : `*${name}* went to play in *Critter Haven*! You can swap party members from the menu.`,
         },
       ]);
-      this.story.onBefriend();
+      this.story.onBefriend(w.species, w.id);
+      if (w.id === "thief") this.life.refreshCrumbs();
       this.save();
     } finally {
       this.camShot = null;
@@ -943,7 +1004,8 @@ export class Game {
     // pick a fresh spot near home & sometimes a new species of the same zone
     const zone = SPECIES[w.species].zone;
     const pool = (Object.keys(SPECIES) as SpeciesId[]).filter((s) => SPECIES[s].zone === zone);
-    const fresh = new WildCritter(this.scene, w.id + "r", pool[Math.floor(Math.random() * pool.length)], Math.random() < 0.08 ? 1 : 0, w.home.clone(), w.range);
+    const rare = this.life.buffActive("lucky") ? 0.45 : 0.08;
+    const fresh = new WildCritter(this.scene, w.id + "r", pool[Math.floor(Math.random() * pool.length)], Math.random() < rare ? 1 : 0, w.home.clone(), w.range);
     w.model.dispose();
     const i = L.wild.indexOf(w);
     L.wild[i] = fresh;
@@ -1022,12 +1084,33 @@ export class Game {
   /* Inventory / quests                                                  */
   /* ================================================================== */
 
+  /** how many of anything the player has (materials, ingredients, dyes "dye_x", foods, key items) */
+  count(id: string): number {
+    if (id in RESOURCES) return this.state.resources[id as ResourceId];
+    if (id in INGREDIENTS) return this.state.ingredients[id as IngredientId] ?? 0;
+    if (id.startsWith("dye_")) return this.state.dyes[id.slice(4) as DyeId] ?? 0;
+    if (id in FOODS && id !== "cookie") return this.state.foods[id as FoodId] ?? 0;
+    return this.state.keyItems[id] ?? 0;
+  }
+
   give(id: ResourceId | string, n: number, quiet = false) {
     if (id in RESOURCES) {
       const r = id as ResourceId;
       this.state.resources[r] += n;
       this.ui.setResources(this.state.resources, r);
       if (!quiet) this.ui.toast(`+${n} ${RESOURCES[r].name}`, RESOURCES[r].icon, RESOURCES[r].color);
+    } else if (id in INGREDIENTS) {
+      const k = id as IngredientId;
+      this.state.ingredients[k] = (this.state.ingredients[k] ?? 0) + n;
+      if (!quiet) this.ui.toast(`+${n} ${INGREDIENTS[k].name}`, INGREDIENTS[k].icon, INGREDIENTS[k].color);
+    } else if (id.startsWith("dye_")) {
+      const d = id.slice(4) as DyeId;
+      this.state.dyes[d] = (this.state.dyes[d] ?? 0) + n;
+      if (!quiet) this.ui.toast(`+${n} ${DYES[d].name}`, "🌼", DYES[d].color);
+    } else if (id in FOODS && id !== "cookie") {
+      const f = id as FoodId;
+      this.state.foods[f] = (this.state.foods[f] ?? 0) + n;
+      if (!quiet) this.ui.toast(`+${n} ${FOODS[f].name}`, FOODS[f].icon, "var(--butter)");
     } else {
       this.state.keyItems[id] = (this.state.keyItems[id] ?? 0) + n;
       const k = KEY_ITEMS[id as keyof typeof KEY_ITEMS];
@@ -1044,7 +1127,10 @@ export class Game {
     if (id in RESOURCES) {
       this.state.resources[id as ResourceId] = Math.max(0, this.state.resources[id as ResourceId] - n);
       this.ui.setResources(this.state.resources);
-    } else this.state.keyItems[id] = Math.max(0, (this.state.keyItems[id] ?? 0) - n);
+    } else if (id in INGREDIENTS) this.state.ingredients[id as IngredientId] = Math.max(0, (this.state.ingredients[id as IngredientId] ?? 0) - n);
+    else if (id.startsWith("dye_")) this.state.dyes[id.slice(4) as DyeId] = Math.max(0, (this.state.dyes[id.slice(4) as DyeId] ?? 0) - n);
+    else if (id in FOODS && id !== "cookie") this.state.foods[id as FoodId] = Math.max(0, (this.state.foods[id as FoodId] ?? 0) - n);
+    else this.state.keyItems[id] = Math.max(0, (this.state.keyItems[id] ?? 0) - n);
     this.refreshQuestUI();
   }
 
@@ -1090,10 +1176,11 @@ export class Game {
     node.readyAt = this.time + 75;
     node.setReady(false);
     let n = 1 + (Math.random() < 0.5 ? 1 : 0);
-    const talent: Partial<Record<ResourceId, SpeciesId>> = { petal: "puffbun", twig: "fennix", berry: "hoglet", pebble: "ribbit", crystal: "molly" };
-    const helper = talent[node.kind];
+    const talent: Partial<Record<NodeKind, SpeciesId>> = { petal: "puffbun", twig: "fennix", berry: "hoglet", pebble: "ribbit", crystal: "molly", apple: "redpanda", mushroom: "redpanda", honey: "redpanda" };
+    const helper = talent[node.kind] ?? (node.kind.startsWith("dye_") ? "puffbun" : undefined);
+    if (this.buffActive("helpful") && this.followers.length) n++;
     if (helper && this.partyHas(helper)) {
-      n++;
+      n += this.bestFriendship(helper) >= 5 ? 2 : 1;
       const f = this.followers.find((x) => x.owned.species === helper);
       if (f) {
         f.model.emote("happy");
@@ -1199,6 +1286,44 @@ export class Game {
     this.refreshQuestUI(true);
     this.save();
     return true;
+  }
+
+  buffActive(id: BuffId) {
+    return this.life.buffActive(id);
+  }
+  bestFriendship(s: SpeciesId) {
+    return this.life.bestFriendship(s);
+  }
+
+  async openOven() {
+    if (!this.state.skills.cooking) {
+      await this.ui.say([{ text: "A big warm oven. Mocha would have to teach you how to bake first!" }]);
+      return;
+    }
+    const made = await openCookMenu(this);
+    if (made) this.story.onCook(made);
+  }
+
+  async openSewing() {
+    if (!this.state.skills.sewing) {
+      await this.ui.say([{ text: "Stitch's sewing machine — shiny and clicky! Ask Stitch to teach you how to sew." }]);
+      return;
+    }
+    await openSewingMenu(this);
+  }
+
+  async openOrders() {
+    if (!this.state.skills.cooking) {
+      await this.ui.say([{ text: "The café order board is covered in cute doodles of cakes. Learn to bake with Mocha to take orders!" }]);
+      return;
+    }
+    if (!this.state.orders.length) this.life.refreshOrders();
+    await openOrdersMenu(this);
+  }
+
+  async cafeSnack() {
+    const f = await chooseSnack(this);
+    if (f) await this.life.eat(f, true);
   }
 
   async openBuildMenu(plot?: number) {

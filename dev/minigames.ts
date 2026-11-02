@@ -14,6 +14,7 @@ const COLORS: Record<SpeciesId, string> = {
   fennix: "#ffc49b",
   hoglet: "#d9b99b",
   shroomy: "#fff0dc",
+  redpanda: "#e8875a",
   ribbit: "#a8e0b0",
   duckling: "#fde68a",
   glowbat: "#c7b3f0",

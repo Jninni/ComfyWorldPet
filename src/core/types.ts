@@ -49,5 +49,7 @@ export interface ExteriorDef {
   /** the door: player walking into this point enters */
   door: Vector3;
   colliders: Collider[];
+  /** optional named outdoor spots (e.g. café tables, an order board) in WORLD space */
+  spots?: Record<string, Vector3>;
   update?: (dt: number, t: number) => void;
 }

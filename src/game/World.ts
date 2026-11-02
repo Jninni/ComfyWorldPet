@@ -32,18 +32,22 @@ import {
   type Motes,
 } from "../world/props";
 import { buildExterior, BUILDING_IDS, type BuildingId } from "../world/buildings";
-import { Batch, ball, blob, softBox, torus, softCyl, cone } from "../render/Shapes";
+import { Batch, ball, blob, softBox, torus, softCyl, cone, lathe, disc } from "../render/Shapes";
 import { rng } from "../render/Palette";
 import { WORLD, LOC, heightAt, walkField, isWater, nearPath, ellipseD, POND, ZONE_SHAPES, zoneAt } from "../world/layout";
 import { WildCritter } from "./Actors";
 import { SPECIES, type SpeciesId, type ZoneId } from "../data/species";
 import type { ResourceId } from "../data/items";
+import { DYES, type DyeId } from "../data/crafting";
+
+/** Everything a gathering spot can give: building materials, cooking ingredients or dye flowers. */
+export type NodeKind = ResourceId | "apple" | "mushroom" | "honey" | `dye_${DyeId}`;
 import { audio } from "../audio/Audio";
 import type { Collider, ExteriorDef } from "../core/types";
 
 export interface ResourceNode {
   id: string;
-  kind: ResourceId;
+  kind: NodeKind;
   pos: Vector3;
   readyAt: number;
   setReady(on: boolean): void;
@@ -72,7 +76,7 @@ export class Overworld {
   npcSpots = {
     mayor: new Vector3(4.5, 0, -6),
     brambleGate: new Vector3(3.2, 0, 30.5),
-    brambleHaven: new Vector3(33, 0, 7.5),
+    brambleHaven: new Vector3(36.5, 0, 8.5),
     pip: new Vector3(-9, 0, -7),
     pipMeadow: new Vector3(-27, 0, 92),
     pipWoods: new Vector3(-104, 0, 56),
@@ -80,11 +84,12 @@ export class Overworld {
     marina: new Vector3(83, 0, 23),
   };
   pickups: Pickup[] = [];
+  nodes: ResourceNode[] = [];
   private terrain!: TerrainResult;
   private chunks = new Map<string, PropBatches>();
   private exteriors: ExteriorDef[] = [];
   private updaters: ((dt: number, t: number) => void)[] = [];
-  private nodeTemplates = new Map<ResourceId, { base: Mesh; star: Mesh }>();
+  private nodeTemplates = new Map<NodeKind, { base: Mesh; star: Mesh }>();
   private occupied: { x: number; z: number; r: number }[] = [];
 
   constructor(private g: Game) {
@@ -135,7 +140,7 @@ export class Overworld {
       this.exteriors.push(ext);
       this.col(ext.colliders);
       this.doors.set(id, ext.door.clone());
-      this.reserve(b.x, b.z, 5.5);
+      this.reserve(b.x, b.z, id === "bakery" ? 7 : 5.5);
       this.reserve(ext.door.x, ext.door.z - 1.5, 2.5);
       this.interacts.push({
         id: "door_" + id,
@@ -145,6 +150,31 @@ export class Overworld {
         h: 2.4,
         run: () => this.g.enterBuilding(id),
       });
+    }
+    for (const p of LOC.garden) this.reserve(p.x, p.z, 2.4);
+    this.reserve(LOC.garden[0].x - 4.1, LOC.garden[0].z + 1.5, 1.5);
+    // café order board & tables on the bakery patio
+    const bakeryExt = this.exteriors.find((e) => e.id === "bakery");
+    const ob = bakeryExt?.spots?.order_board;
+    if (ob)
+      this.interacts.push({
+        id: "order_board",
+        pos: ob,
+        r: 1.8,
+        label: "Café orders",
+        run: () => this.g.openOrders(),
+      });
+    for (let i = 0; i < 3; i++) {
+      const t = bakeryExt?.spots?.["cafe_table_" + i];
+      if (t)
+        this.interacts.push({
+          id: "cafe_table_" + i,
+          pos: t,
+          r: 1.5,
+          label: "Have a snack",
+          enabled: () => !!this.g.state.skills.cooking,
+          run: () => this.g.cafeSnack(),
+        });
     }
     // plaza fountain
     const vc = this.chunk(0, 0);
@@ -374,6 +404,21 @@ export class Overworld {
       ["woods", "berry", 7],
       ["pond", "pebble", 8],
     ];
+    // cooking ingredients
+    res.push(["village", "apple" as ResourceId, 3], ["meadow", "apple" as ResourceId, 4], ["woods", "mushroom" as ResourceId, 8], ["meadow", "honey" as ResourceId, 5]);
+    // dye flowers: each colour grows in its own place, so collecting colours means exploring
+    const dyePlaces: [ZoneId, DyeId, number][] = [
+      ["meadow", "rose", 4],
+      ["meadow", "sunflower", 4],
+      ["meadow", "lavender", 4],
+      ["meadow", "daisy", 3],
+      ["village", "daisy", 2],
+      ["village", "poppy", 2],
+      ["woods", "poppy", 2],
+      ["woods", "mint", 4],
+      ["pond", "bluebell", 5],
+    ];
+    for (const [zone, dye, n] of dyePlaces) res.push([zone, ("dye_" + dye) as ResourceId, n]);
     for (const [zone, kind, n] of res) {
       scatter(zone, n, 1.0, (x, z) => this.addResourceNode(owLoc, kind, new Vector3(x, heightAt(x, z), z)), 0.4);
     }
@@ -400,7 +445,7 @@ export class Overworld {
     // wild critters
     const table: Record<string, SpeciesId[]> = {
       meadow: ["puffbun", "puffbun", "chirpy", "puffbun", "chirpy", "puffbun", "chirpy"],
-      woods: ["fennix", "hoglet", "shroomy", "fennix", "hoglet", "shroomy", "shroomy", "fennix"],
+      woods: ["fennix", "hoglet", "shroomy", "redpanda", "fennix", "hoglet", "shroomy", "redpanda", "fennix"],
       pond: ["ribbit", "duckling", "ribbit", "duckling", "ribbit", "duckling"],
     };
     for (const [zone, list] of Object.entries(table)) {
@@ -587,7 +632,7 @@ export class Overworld {
 
   private buildNodeTemplates() {
     const scene = this.g.scene;
-    const mk = (kind: ResourceId, build: (b: Batch) => void) => {
+    const mk = (kind: NodeKind, build: (b: Batch) => void) => {
       const b = new Batch(scene, "node_" + kind);
       build(b);
       const base = b.build({ outline: 0.03 })!;
@@ -650,9 +695,68 @@ export class Overworld {
       }
       b.add(cone(scene, 1.3, 0.24, { pos: [0, 0, 0], color: "#e8d6ff" }, 6));
     });
+    mk("apple", (b) => {
+      // a little woven basket brimming with apples
+      b.add(lathe(scene, [[0, 0], [0.42, 0], [0.5, 0.08], [0.58, 0.42], [0.55, 0.46], [0, 0.46]], { color: "woodLight", bottom: "woodDeep" }, 14));
+      b.add(torus(scene, 0.56, 0.06, { pos: [0, 0.44, 0], color: "wood" }, 16));
+      for (let i = 0; i < 7; i++) {
+        const a = (i / 7) * Math.PI * 2;
+        const r = i === 6 ? 0 : 0.28;
+        b.add(ball(scene, 0.17, { pos: [Math.cos(a) * r, i === 6 ? 0.66 : 0.52, Math.sin(a) * r], color: i % 3 === 0 ? "#ffb3a0" : "#f47a7a" }, 8));
+      }
+      b.add(blob(scene, 0.1, 0.03, 0.06, { pos: [0.05, 0.86, 0], rot: [0, 0, 0.5], color: "leaf" }, 6));
+    });
+    mk("mushroom", (b) => {
+      const caps = ["#f7a3b8", "#e9b8d9", "#f6c79a"];
+      for (let i = 0; i < 4; i++) {
+        const a = (i / 4) * Math.PI * 2 + 0.4;
+        const r = i === 0 ? 0 : 0.3;
+        const h = i === 0 ? 0.42 : 0.26;
+        const x = Math.cos(a) * r,
+          z = Math.sin(a) * r;
+        b.add(softCyl(scene, h, 0.06, 0.08, { pos: [x, 0, z], color: "cream" }, 0.03, 8));
+        b.add(lathe(scene, [[0, h - 0.04], [0.2 + (i === 0 ? 0.06 : 0), h - 0.04], [0.16, h + 0.08], [0, h + 0.14]], { color: caps[i % 3] }, 12));
+        b.add(ball(scene, 0.035, { pos: [x + 0.06, h + 0.1, z], color: "white" }, 5));
+      }
+    });
+    mk("honey", (b) => {
+      // a cosy beehive on a little post
+      b.add(softCyl(scene, 0.7, 0.06, 0.08, { color: "woodDeep" }, 0.03, 8));
+      b.add(softBox(scene, 0.7, 0.08, 0.7, { pos: [0, 0.72, 0], color: "woodLight" }, 0.03));
+      for (let i = 0; i < 4; i++) b.add(softCyl(scene, 0.22, 0.38 - i * 0.07, 0.4 - i * 0.07, { pos: [0, 0.76 + i * 0.2, 0], color: i % 2 ? "#f5cf6b" : "#fbe7a1" }, 0.08, 14));
+      b.add(ball(scene, 0.1, { pos: [0, 1.62, 0], color: "#f5cf6b" }, 8));
+      b.add(disc(scene, 0.09, 0.04, { pos: [0, 0.86, -0.37], rot: [Math.PI / 2, 0, 0], color: "ink" }, 10));
+      b.add(blob(scene, 0.12, 0.04, 0.1, { pos: [0.3, 1.1, -0.3], rot: [0, 0, 0.6], color: "#ffd36b" }, 6));
+      b.add(blob(scene, 0.06, 0.12, 0.1, { pos: [0.3, 1.22, -0.3], color: "white" }, 6));
+    });
+    for (const [id, d] of Object.entries(DYES) as [DyeId, { color: string }][]) {
+      mk(("dye_" + id) as NodeKind, (b) => {
+        // a clump of big bright flowers in this dye's colour
+        b.add(ball(scene, 0.32, { pos: [0, 0.1, 0], scale: [1.3, 0.45, 1.3], color: id === "mint" ? "leafLight" : "leaf", bottom: "leafDeep" }, 8));
+        const n = id === "mint" ? 0 : 4;
+        for (let i = 0; i < n; i++) {
+          const a = (i / n) * Math.PI * 2 + 0.3;
+          const x = Math.cos(a) * 0.28,
+            z = Math.sin(a) * 0.28;
+          const h = 0.45 + (i % 2) * 0.12;
+          b.add(softCyl(scene, h, 0.025, 0.03, { pos: [x, 0, z], color: "leafDeep" }, 0.01, 6));
+          for (let k = 0; k < 6; k++) {
+            const pa = (k / 6) * Math.PI * 2;
+            b.add(blob(scene, id === "sunflower" ? 0.11 : 0.1, 0.035, 0.06, { pos: [x + Math.cos(pa) * 0.1, h, z + Math.sin(pa) * 0.1], rot: [0, -pa, 0.3], color: d.color }, 6));
+          }
+          b.add(ball(scene, 0.06, { pos: [x, h + 0.02, z], color: id === "sunflower" ? "#9a6a3a" : id === "daisy" ? "butterDeep" : "#fff3c4" }, 6));
+        }
+        if (id === "mint") {
+          for (let i = 0; i < 7; i++) {
+            const a = (i / 7) * Math.PI * 2;
+            b.add(blob(scene, 0.16, 0.04, 0.09, { pos: [Math.cos(a) * 0.18, 0.32 + (i % 3) * 0.08, Math.sin(a) * 0.18], rot: [0, -a, 0.5], color: d.color }, 6));
+          }
+        }
+      });
+    }
   }
 
-  addResourceNode(L: Location | { interacts: Interact[] }, kind: ResourceId, p: Vector3) {
+  addResourceNode(L: Location | { interacts: Interact[] }, kind: NodeKind, p: Vector3) {
     const tpl = this.nodeTemplates.get(kind);
     if (!tpl) return;
     const id = `res_${kind}_${Math.round(p.x)}_${Math.round(p.z)}`;
@@ -676,6 +780,7 @@ export class Overworld {
         inst.scaling.setAll(on ? 1 : 0.55);
       },
     };
+    this.nodes.push(node);
     this.updaters.push((_dt, t) => {
       if (this.g.time >= node.readyAt && !star.isEnabled()) node.setReady(true);
       if (star.isEnabled()) {
@@ -685,17 +790,26 @@ export class Overworld {
         star.scaling.setAll(s);
       }
     });
-    const label: Record<ResourceId, string> = { petal: "Pick petals", twig: "Gather twigs", berry: "Pick berries", pebble: "Collect pebbles", crystal: "Mine crystals" };
+    const label: Record<string, string> = {
+      petal: "Pick petals",
+      twig: "Gather twigs",
+      berry: "Pick berries",
+      pebble: "Collect pebbles",
+      crystal: "Mine crystals",
+      apple: "Pick apples",
+      mushroom: "Pick mushrooms",
+      honey: "Collect honey",
+    };
     L.interacts.push({
       id,
       pos: p,
       r: 1.7,
-      label: label[kind],
+      label: label[kind] ?? `Pick ${DYES[kind.slice(4) as DyeId]?.name ?? "flowers"}`,
       enabled: () => this.g.time >= node.readyAt,
       run: () => this.g.gather(L as Location, node),
     });
-    if (kind === "pebble" || kind === "petal" || kind === "crystal") return;
-    this.collision.add({ kind: "circle", x: p.x, z: p.z, r: kind === "berry" ? 0.7 : 0.3 });
+    if (kind === "pebble" || kind === "petal" || kind === "crystal" || kind === "mushroom" || kind.startsWith("dye_")) return;
+    this.collision.add({ kind: "circle", x: p.x, z: p.z, r: kind === "berry" ? 0.7 : kind === "honey" ? 0.45 : 0.35 });
   }
 
   private makeYarn(color: string): Mesh {

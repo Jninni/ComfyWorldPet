@@ -1,6 +1,7 @@
 import { DEFAULT_LOOK } from "../entities/characterModels";
 import type { SpeciesId } from "../data/species";
 import type { ResourceId, BuildableId } from "../data/items";
+import type { IngredientId, FoodId, DyeId, CropId, BuffId, Garment, CafeOrder } from "../data/crafting";
 
 export interface PlayerLookState {
   skin: string;
@@ -24,6 +25,13 @@ export interface QuestState {
   done: boolean;
 }
 
+export interface GardenBed {
+  crop: CropId | null;
+  /** Date.now() when planted */
+  plantedAt: number;
+  watered: boolean;
+}
+
 export interface GameState {
   version: number;
   playerName: string;
@@ -41,6 +49,18 @@ export interface GameState {
   playTime: number;
   /** collected one-off pickups (yarn balls, treasure chests…) */
   taken: string[];
+  // ---- v2: cooking, gardening, sewing ----
+  ingredients: Record<IngredientId, number>;
+  foods: Partial<Record<FoodId, number>>;
+  dyes: Partial<Record<DyeId, number>>;
+  garden: GardenBed[];
+  /** buff → expiry (Date.now() ms) or remaining uses for "cozy" */
+  buffs: Partial<Record<BuffId, number>>;
+  skills: { cooking?: boolean; sewing?: boolean; gardening?: boolean };
+  wardrobe: Garment[];
+  nextGarmentUid: number;
+  orders: CafeOrder[];
+  ordersRefreshAt: number;
 }
 
 export const PARTY_MAX = 3;
@@ -48,7 +68,7 @@ const KEY = "cwp.save.v1";
 
 export function newState(): GameState {
   return {
-    version: 1,
+    version: 2,
     playerName: "Sunny",
     look: { ...DEFAULT_LOOK },
     location: { where: "home", x: 0, z: 0, rot: 0 },
@@ -63,6 +83,16 @@ export function newState(): GameState {
     hats: ["none"],
     playTime: 0,
     taken: [],
+    ingredients: { wheat: 0, carrot: 0, strawberry: 0, pumpkin: 0, apple: 0, mushroom: 0, honey: 0 },
+    foods: {},
+    dyes: {},
+    garden: [0, 1, 2, 3].map(() => ({ crop: null, plantedAt: 0, watered: false })),
+    buffs: {},
+    skills: {},
+    wardrobe: [],
+    nextGarmentUid: 1,
+    orders: [],
+    ordersRefreshAt: 0,
   };
 }
 
@@ -80,7 +110,17 @@ export function loadState(): GameState | null {
     if (!raw) return null;
     const s = JSON.parse(raw) as GameState;
     const base = newState();
-    return { ...base, ...s, resources: { ...base.resources, ...s.resources } };
+    // older saves simply lack the newer fields: fill them with defaults (never drop progress)
+    return {
+      ...base,
+      ...s,
+      version: 2,
+      look: { ...base.look, ...s.look },
+      resources: { ...base.resources, ...s.resources },
+      ingredients: { ...base.ingredients, ...(s.ingredients ?? {}) },
+      skills: { ...(s.skills ?? {}) },
+      garden: s.garden?.length ? s.garden : base.garden,
+    };
   } catch {
     return null;
   }

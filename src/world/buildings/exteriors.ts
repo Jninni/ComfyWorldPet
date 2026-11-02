@@ -8,6 +8,7 @@ import { PI, heart, star, leaf, bush, flower, flowerPot, pottedPlant, lantern, i
 import { awning, tieredStand, wateringCan, crate } from "./int_flowershop";
 import { spool } from "./int_sewing";
 import { hammerShape, sawShape, sawhorse } from "./int_workshop";
+import { buildBakeryExt } from "./ext_bakery";
 import type { ColorLike } from "../../render/Shapes";
 import { mixCol, rng, jitterCol } from "../../render/Palette";
 
@@ -85,7 +86,7 @@ function gableRoof(k: Kit, w: number, d: number, y0: number, ph: number, o: { co
 }
 
 /** window on a wall surface (frame: local -Z out). glass glows warm. */
-function extWindow(
+export function extWindow(
   k: Kit,
   p: V3,
   rotY: number,
@@ -141,7 +142,7 @@ function extWindow(
 }
 
 /** front door. p = bottom centre on wall surface. */
-function extDoor(k: Kit, p: V3, o: { w?: number; h?: number; color: ColorLike; frame?: ColorLike; heartWin?: boolean; knob?: ColorLike; kind?: "arch" | "barn" }) {
+export function extDoor(k: Kit, p: V3, o: { w?: number; h?: number; color: ColorLike; frame?: ColorLike; heartWin?: boolean; knob?: ColorLike; kind?: "arch" | "barn" }) {
   const w = o.w ?? 1.15,
     h = o.h ?? 2.15;
   k.at(k.frame(p, 0), () => {
@@ -180,7 +181,7 @@ function doorstep(k: Kit, x: number, z: number, w: number, seed: number) {
 }
 
 /** wall lantern beside a door (local -Z out). */
-function wallLantern(k: Kit, p: V3) {
+export function wallLantern(k: Kit, p: V3) {
   k.box(0.06, 0.06, 0.3, [p[0], p[1] + 0.32, p[2] - 0.15], "#6d5a78", { r: 0.02 });
   lantern(k, [p[0], p[1], p[2] - 0.32], "#6d5a78", 1.0);
   k.lathe(
@@ -230,9 +231,11 @@ function hangingSign(k: Kit, hinge: V3, dir: 1 | -1, len: number, board: ColorLi
 /* buildings                                                           */
 /* ------------------------------------------------------------------ */
 
-interface Built {
+export interface Built {
   footprint: [number, number, number, number][]; // local rects: cx, cz, w, d
   doorLocal: V3;
+  /** optional named outdoor spots in LOCAL space (transformed to world in ExteriorDef.spots) */
+  spots?: Record<string, V3>;
   update?: (dt: number, t: number) => void;
 }
 
@@ -807,6 +810,7 @@ const BUILDERS: Record<string, (k: Kit, scene: Scene) => Built> = {
   flowershop: buildFlowerExt,
   sewing: buildSewingExt,
   workshop: buildWorkshopExt,
+  bakery: buildBakeryExt,
 };
 
 function worldColliders(root: TransformNode, rects: Built["footprint"], rotY: number): Collider[] {
@@ -863,5 +867,10 @@ export function buildExteriorImpl(scene: Scene, id: string, pos: Vector3, rotY: 
   const door = Vector3.TransformCoordinates(new Vector3(...b.doorLocal), m);
   door.y = pos.y;
   void Matrix;
-  return { id, root, door, colliders: worldColliders(root, b.footprint, rotY), update: b.update };
+  let spots: Record<string, Vector3> | undefined;
+  if (b.spots) {
+    spots = {};
+    for (const [name, p] of Object.entries(b.spots)) spots[name] = Vector3.TransformCoordinates(new Vector3(...p), m);
+  }
+  return { id, root, door, colliders: worldColliders(root, b.footprint, rotY), spots, update: b.update };
 }

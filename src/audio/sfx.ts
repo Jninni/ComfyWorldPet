@@ -403,6 +403,8 @@ const VOICES: Record<string, VoiceDef> = {
   duckling: { f: 1700, wave: "triangle", syl: [{ p: 1, d: 0.08, g: 0.07 }, { p: 1.04, d: 0.09, g: 0 }], glide: 0.86, lp: 3500, formant: 2200 },
   glowbat: { f: 1900, wave: "sine", syl: [{ p: 1, d: 0.04, g: 0.035 }, { p: 1.1, d: 0.04, g: 0.035 }, { p: 1.2, d: 0.05, g: 0 }], glide: 1.2, trill: [35, 60], rev: 0.5, gain: 0.8 },
   molly: { f: 380, wave: "warm", syl: [{ p: 1, d: 0.12, g: 0.05 }, { p: 1.12, d: 0.18, g: 0 }], glide: 1.06, trill: [6, 20], lp: 1600, gain: 1.2 },
+  // red panda: a breathy little "huff" then squeaky twittering chirps (the huff-quack)
+  redpanda: { f: 1250, wave: "triangle", syl: [{ p: 0.78, d: 0.05, g: 0.035 }, { p: 1.12, d: 0.045, g: 0.025 }, { p: 1.28, d: 0.07, g: 0 }], glide: 1.16, trill: [28, 70], breath: 0.1, lp: 3600, formant: 1800, gain: 0.85 },
   mochi: { f: 700, wave: "reed", syl: [{ p: 1, d: 0.2, g: 0 }], glide: 1.35, lp: 2200, formant: 1300, trill: [6, 25] },
   generic: { f: 900, wave: "triangle", syl: [{ p: 1, d: 0.08, g: 0.05 }, { p: 1.12, d: 0.1, g: 0 }], glide: 1.2, lp: 3000 },
 };

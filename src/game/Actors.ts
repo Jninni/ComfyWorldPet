@@ -30,6 +30,8 @@ export class PlayerCtl {
   private vz = 0;
   private stepT = 0;
   celebrate = 0;
+  /** food buffs (zoomies) */
+  speedMul = 1;
   /** breadcrumb trail for followers */
   trail: Vector3[] = [];
   private trailDist = 0;
@@ -62,7 +64,7 @@ export class PlayerCtl {
     const rx = fz,
       rz = -fx;
     const mag = Math.min(1, Math.hypot(mx, my));
-    const maxSpeed = mag > 0.85 ? 6.8 : 4.6;
+    const maxSpeed = (mag > 0.85 ? 6.8 : 4.6) * this.speedMul;
     const tx = (rx * mx + fx * my) * maxSpeed;
     const tz = (rz * mx + fz * my) * maxSpeed;
     const acc = mag > 0.05 ? 14 : 18;

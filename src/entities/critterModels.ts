@@ -15,7 +15,7 @@ import type { SpeciesId } from "../data/species";
 import { rng } from "../render/Palette";
 import { toonMat } from "../render/Toon";
 import { lathe, type V3 } from "../render/Shapes";
-import { Kit, ballM, blobM, softConeM, puffStar, capOn, decal, surf, rotZTo, rotYTo, add, buildHeads, type Ell, type FaceSpec } from "./critterParts";
+import { Kit, ballM, blobM, softConeM, puffStar, capOn, decal, surf, arcOn, rotZTo, rotYTo, add, buildHeads, type Ell, type FaceSpec } from "./critterParts";
 
 export interface CritterAnimState {
   speed: number; // 0..1 normalized move speed
@@ -1345,7 +1345,152 @@ function buildMochi(c: Ctx): Critter {
   );
 }
 
+/** Rare-variant accessory: a tiny puffy chef toque with a coloured band. */
+function toque(c: Ctx, at: V3, band: string, rot: V3 = [0, 0, 0], s = 1): Mesh[] {
+  const sc = c.scene;
+  const P = (v: V3): V3 => add(at, rotDir(rot, [v[0] * s, v[1] * s, v[2] * s]));
+  const out: Mesh[] = [
+    blobM(sc, [0.062 * s, 0.03 * s, 0.058 * s], P([0, 0.012, 0]), "#fffdf8", rot, "#f2ece6", 12),
+    blobM(sc, [0.064 * s, 0.014 * s, 0.06 * s], P([0, 0.004, 0]), band, rot, undefined, 12),
+  ];
+  // puffy top: a ring of soft balls with one on top
+  for (let i = 0; i < 5; i++) {
+    const a = (i / 5) * TAU + 0.3;
+    out.push(ballM(sc, 0.036 * s, P([Math.sin(a) * 0.034, 0.058, Math.cos(a) * 0.032]), "#ffffff", "#f3ede8", 8));
+  }
+  out.push(ballM(sc, 0.04 * s, P([0, 0.078, 0]), "#ffffff", undefined, 8));
+  return out;
+}
+
+function buildRedpanda(c: Ctx): Critter {
+  const P = c.rare
+    ? { fur: "#ffaac4", furB: "#f48fb0", mask: "#fffaf6", ring: "#fff0de", tip: "#d9739a", dark: "#a3707a", darkB: "#8a5a66", tear: "#e8799e", inner: "#e07a9a", nose: "#5a3848", band: "#ff8fb4" }
+    : { fur: "#e57a46", furB: "#cc6033", mask: "#fffaf2", ring: "#f9dcb6", tip: "#9a4a33", dark: "#74463b", darkB: "#58362f", tear: "#b8542f", inner: "#a8553a", nose: "#3b2f45", band: "#ff9fbf" };
+  const { scene: s, k } = c;
+  // chubby little body: rusty back, dark chest & belly
+  const BE: Ell = { c: [0, 0.24, -0.03], r: [0.165, 0.155, 0.205] };
+  k.part("body", c.base, [0, 0, 0], [
+    blobM(s, BE.r, BE.c, P.fur, undefined, P.furB, 12),
+    capOn(s, BE, 0, -0.62, 0.62, P.dark, { sx: 1.1, wob: 0.06, seed: 3 }),
+    blobM(s, [0.11, 0.1, 0.07], [0, 0.29, 0.15], P.dark, undefined, P.darkB),
+  ]);
+  const legs: Leg[] = [];
+  const legMesh = (x: number, zz: number) => [blobM(s, [0.054, 0.088, 0.056], [x, 0.088, zz], P.dark, undefined, P.darkB), blobM(s, [0.052, 0.032, 0.062], [x, 0.032, zz + 0.014], P.darkB)];
+  const la = k.node("legsA", c.base, [0, 0, 0]);
+  k.part("legsAMesh", la, [0, 0, 0], [...legMesh(-0.088, 0.1), ...legMesh(0.088, -0.15)]);
+  const lb = k.node("legsB", c.base, [0, 0, 0]);
+  k.part("legsBMesh", lb, [0, 0, 0], [...legMesh(0.088, 0.1), ...legMesh(-0.088, -0.15)]);
+  legs.push(leg(la, 0, 1, 0.065), leg(lb, 0.5, -1, 0.065));
+
+  // big round head with the classic white mask
+  const hp: V3 = [0, 0.36, 0.12];
+  const head = k.node("head", c.base, hp);
+  const HE: Ell = { c: [0, 0.5, 0.14], r: [0.22, 0.18, 0.185] };
+  const MU: Ell = { c: [0, 0.44, 0.265], r: [0.085, 0.06, 0.08] };
+  const hs = (): Mesh[] => {
+    const hs: Mesh[] = [
+      blobM(s, HE.r, HE.c, P.fur, undefined, P.furB, 14),
+      // white cheek patches (puffy, fluffing out at the sides)
+      capOn(s, HE, 0.9, -0.3, 0.42, P.mask, { sx: 1.05, wob: 0.08, seed: 2 }),
+      capOn(s, HE, -0.9, -0.3, 0.42, P.mask, { sx: 1.05, wob: 0.08, seed: 5 }),
+      blobM(s, [0.068, 0.056, 0.066], [-0.18, 0.43, 0.13], P.mask, [0, 0, 0.6]),
+      blobM(s, [0.068, 0.056, 0.066], [0.18, 0.43, 0.13], P.mask, [0, 0, -0.6]),
+      // white muzzle + chin
+      blobM(s, MU.r, MU.c, P.mask),
+      // eyebrow dots
+      capOn(s, HE, 0.36, 0.42, 0.11, P.mask, { sx: 1.35 }),
+      capOn(s, HE, -0.36, 0.42, 0.11, P.mask, { sx: 1.35 }),
+    ];
+    // tear-mark stripes: darker rust running from under each eye down to the muzzle corners
+    for (const sd of [-1, 1]) hs.push(capOn(s, HE, sd * 0.34, -0.21, 0.07, P.tear, { sx: 0.85, sy: 2.7, lift: 0.004 }));
+    if (c.rare) hs.push(...toque(c, [0.04, 0.66, 0.1], P.band, [-0.12, 0, -0.2], 1.15));
+    return hs;
+  };
+  const faces = buildHeads(k, head, hp, hs, {
+    head: HE,
+    eyeYaw: 0.42,
+    eyePitch: 0.1,
+    eyeW: 0.036,
+    eyeH: 0.048,
+    cheekYaw: 0.72,
+    cheekPitch: -0.16,
+    cheekR: 0.033,
+    nose: { ell: MU, pitch: 0.48, r: 0.024, color: P.nose, w: 1.35 },
+    mouth: { ell: MU, pitch: 0.0, w: 0.022, h: 0.012, style: "w" },
+  });
+  // white-rimmed round ears: white shell, rust back, dark inside
+  const ears: Ear[] = [];
+  for (const sd of [-1, 1]) {
+    const piv: V3 = [sd * 0.135, 0.6, 0.12];
+    const en = k.node("ear" + sd, head, piv);
+    const rot: V3 = [-0.1, 0, -sd * 0.5];
+    const fwd = rotDir(rot, [0, 0, 1]);
+    const up = rotDir(rot, [0, 1, 0]);
+    const h = 0.15,
+      r = 0.085;
+    k.part("earMesh" + sd, en, piv, [
+      softConeM(s, h, r, piv, P.mask, rot, undefined, [1, 1, 0.55], 12, 0.42),
+      softConeM(s, h * 0.9, r * 0.86, add(add(piv, fwd, -r * 0.55 * 0.3), up, -0.004), P.fur, rot, P.furB, [1, 1, 0.5], 12, 0.42),
+      softConeM(s, h * 0.8, r * 0.76, add(add(piv, fwd, r * 0.55 * 0.4), up, h * 0.05), P.inner, rot, undefined, [1, 1, 0.5], 12, 0.42),
+      blobM(s, [0.03, 0.04, 0.022], add(add(piv, fwd, r * 0.55 * 0.7), up, h * 0.16), P.mask, rot, undefined, 6),
+    ]);
+    ears.push(ear(en, sd, 0.55, 0.4, 0.32));
+  }
+  // BIG ringed fluffy tail: chain of overlapping puffs in alternating rust / cream bands
+  const tp: V3 = [0, 0.22, -0.2];
+  const tn = k.node("tail", c.base, tp);
+  const tail: Mesh[] = [];
+  const N = 13;
+  for (let i = 0; i < N; i++) {
+    const u = i / (N - 1);
+    const p: V3 = [Math.sin(u * 2.4) * 0.03, 0.235 + 0.02 * u + 0.3 * u * u, -0.27 - 0.34 * u + 0.13 * u * u];
+    const r = 0.07 + 0.042 * Math.sin(Math.min(1, u * 1.12) * Math.PI * 0.86);
+    const band = Math.floor((i + 1) / 2) % 2 === 1;
+    tail.push(ballM(s, i === N - 1 ? r * 0.92 : r, p, i === N - 1 ? P.tip : band ? P.ring : P.fur, band ? undefined : P.furB, 12));
+  }
+  k.part("tailMesh", tn, tp, tail);
+  const tails: Tail[] = [{ n: tn, amp: 0.2, f: 2.0, walk: 0.34, gain: 0.5, curlY: 1.95, curlX: -0.1, axis: "y" }];
+  // springy follow-through: the tail chases the pose the shared tail logic asks for (underdamped →
+  // swishy overshoot), and when sleeping it rolls over sideways to wrap round the body like a scarf
+  let tY = 0,
+    tYV = 0,
+    tX = 0,
+    tXV = 0;
+  const tRest = tn.position.clone();
+  const rig: Partial<Rig> & { head: TransformNode; faces: Mesh[] } = {
+    head,
+    faces,
+    ears,
+    tails,
+    legs,
+    nodes: { tail: tn },
+    hook: (cr, dt) => {
+      const gY = tn.rotation.y,
+        gX = tn.rotation.x;
+      const n = Math.ceil(dt / 0.01),
+        h = dt / n;
+      for (let i = 0; i < n; i++) {
+        tYV += (-110 * (tY - gY) - 6 * tYV) * h;
+        tY += tYV * h;
+        tXV += (-110 * (tX - gX) - 6 * tXV) * h;
+        tX += tXV * h;
+      }
+      const sl = cr.sleep;
+      tn.rotation.set(tX, tY, 1.25 * sl + tYV * 0.012);
+      // slide it out to hug the body's side so it peeks round under the chin
+      tn.position.set(tRest.x - 0.075 * sl, tRest.y + 0.03 * sl, tRest.z + 0.03 * sl);
+    },
+  };
+  if (c.rare) addSparkle(c, rig, [-0.28, 0.8, 0.1]);
+  return finish(
+    c,
+    { gait: "trot", freq: 2.7, bob: 0.04, stride: 0.07, lift: 0.06, height: 0.75, radius: 0.28, sleepDrop: 0.07, sleepHeadPitch: 0.2, sleepHeadYaw: -0.3, sleepHeadRoll: 0.42, sleepHeadDrop: 0.065, sleepRoll: 0.09 },
+    rig,
+  );
+}
+
 const BUILDERS: Record<SpeciesId, (c: Ctx) => Critter> = {
+  redpanda: buildRedpanda,
   puffbun: buildPuffbun,
   chirpy: buildChirpy,
   fennix: buildFennix,

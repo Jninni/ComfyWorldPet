@@ -133,7 +133,18 @@ export function nearPath(x: number, z: number, pad = 0): boolean {
 }
 
 /** Key locations */
-export const LOC = {
+export const LOC: {
+  buildings: Record<string, { x: number; z: number; rot: number }>;
+  gateNorth: { x: number; z: number };
+  gateWest: { x: number; z: number };
+  gateEast: { x: number; z: number };
+  caveMouth: { x: number; z: number };
+  plots: { x: number; z: number }[];
+  spawnStart: { x: number; z: number };
+  garden: { x: number; z: number }[];
+  crumbs: [number, number][];
+  thiefNest: [number, number];
+} = {
   buildings: {
     home: { x: -17, z: -19, rot: 0 },
     sewing: { x: 17, z: -19, rot: 0 },
@@ -141,6 +152,7 @@ export const LOC = {
     library: { x: 0, z: 19, rot: 0 },
     flowershop: { x: 16, z: 12, rot: 0 },
     workshop: { x: 40, z: 15, rot: 0 },
+    bakery: { x: 28, z: 12, rot: 0 },
   },
   gateNorth: { x: 0, z: 34 },
   gateWest: { x: -51, z: 6 },
@@ -155,4 +167,24 @@ export const LOC = {
     { x: 46, z: -16 },
   ],
   spawnStart: { x: -17, z: -14 },
+  // the player's veggie garden, just west of the cottage
+  garden: [
+    { x: -27, z: -16.5 },
+    { x: -23.6, z: -16.5 },
+    { x: -27, z: -12.6 },
+    { x: -23.6, z: -12.6 },
+  ],
+  // pastry-thief crumb trail: from the bakery, through the plaza, out the west gate into Mossy Woods
+  crumbs: [
+    [21, 5],
+    [10, 3.5],
+    [-6, 3],
+    [-22, 3],
+    [-38, 5.5],
+    [-56, 9],
+    [-68, 17],
+    [-80, 29],
+    [-89, 41],
+  ],
+  thiefNest: [-95, 50],
 };
