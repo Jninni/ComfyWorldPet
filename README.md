@@ -49,7 +49,9 @@ sky pastels, thick soft plum outlines, chunky rounded shapes, scalloped rugs, he
 |---|---|---|---|
 | Move | Floating joystick (left side) | Left stick / d-pad | WASD / arrows |
 | Talk / interact / confirm | ✋ button | Ⓐ | Space / E / Enter |
-| Back | ↩ button | Ⓑ | Esc |
+| Jump (when nothing to talk to) | ✋ button | Ⓐ | Space |
+| Sprint (hold) | 👟 button | Ⓑ or LT / RT | Shift |
+| Back (menus) | ✕ / tap outside | Ⓑ | Esc |
 | Bag (quests, journal, party, map, style, settings) | 🐾 button / 🎒 | Ⓧ / Start | Q / Tab / P |
 | Journal | — | Ⓨ | J |
 | Rotate camera | Drag with one finger (right side) | Right stick or LB / RB | Drag with the mouse, or `[` `]` / `,` `.` |

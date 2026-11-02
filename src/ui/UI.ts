@@ -161,7 +161,7 @@ export class UI {
       el.addEventListener("pointercancel", up);
       return el;
     };
-    return h(".touch-btns", null, mk("tbtn-a", "a", h("span", null, "✋", this.aLabel)), mk("tbtn-b", "b", "↩"), mk("tbtn-x", "x", "🐾"));
+    return h(".touch-btns", null, mk("tbtn-a", "a", h("span", null, "✋", this.aLabel)), mk("tbtn-b", "b", h("span", null, "👟", h("small", null, "Run"))), mk("tbtn-x", "x", "🐾"));
   }
 
   setActionLabel(t: string) {
@@ -253,7 +253,7 @@ export class UI {
     if (!pos) {
       this.promptEl.style.display = "none";
       this.promptLabel = null;
-      this.setActionLabel("");
+      this.setActionLabel("Jump");
       return;
     }
     (this.promptEl.querySelector(".key") as HTMLElement).textContent = btnLabel("a");

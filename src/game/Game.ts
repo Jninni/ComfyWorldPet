@@ -191,6 +191,13 @@ export class Game {
       this.npcs.set(id, n);
     }
     this.player = new PlayerCtl(scene, this.state.look as PlayerLook);
+    this.player.onJump = () => {
+      this.fx.puff(this.player.pos.add(new Vector3(0, 0.1, 0)), 4, "#f6f0e2");
+      this.followers.forEach((f, i) => (f.hopT = -0.12 - i * 0.12));
+    };
+    this.player.onLand = (p, hard) => {
+      if (this.zone !== "interior") this.fx.puff(p.add(new Vector3(0, 0.08, 0)), hard ? 8 : 5, "#f6f0e2");
+    };
     this.player.onStep = (p) => {
       if (this.zone !== "interior" && Math.random() < 0.5) this.fx.puff(p.add(new Vector3(0, 0.1, 0)), 2, "#f6f0e2");
     };
@@ -261,7 +268,13 @@ export class Game {
       this.story.start("main");
       this.mode = "play";
       const touch = document.body.classList.contains("touch");
-      this.showHint(touch ? "👆 Drag on the left side to walk · tap ✋ to talk" : input.lastDevice === "gamepad" ? "🕹️ Left stick to walk · Ⓐ to talk" : "⌨️ WASD / arrows to walk · Space to talk");
+      this.showHint(
+        touch
+          ? "👆 Drag on the left to walk · ✋ talk / jump · hold 👟 to sprint"
+          : input.lastDevice === "gamepad"
+            ? "🕹️ Stick to walk · Ⓐ talk / jump · hold Ⓑ to sprint"
+            : "⌨️ WASD to walk · Space talk / jump · hold Shift to sprint",
+      );
     }
   }
 
@@ -538,6 +551,8 @@ export class Game {
     const playing = this.mode === "play" && !this.ui.dialogueOpen;
     if (this.mode !== "title") {
       if (playing) {
+        // sprint: hold Ⓑ / a trigger / Shift / the 👟 touch button
+        this.player.sprinting = input.down("b") || input.down("sprint");
         this.player.update(dt, input.move.x, input.move.y, this.camAlpha, L.collision, L.ground);
         this.state.playTime += dt;
       } else this.player.idle(dt, false);
@@ -546,7 +561,7 @@ export class Game {
     const trail = this.player.trail;
     this.followers.forEach((f, i) => {
       const idx = Math.min(trail.length - 1, 4 + i * 4);
-      f.update(dt, trail[idx] ?? this.player.pos, L.ground);
+      f.update(dt, trail[idx] ?? this.player.pos, L.ground, this.player.speed * 6.8 * this.player.speedMul * (this.player.sprinting ? 1.45 : 1));
     });
     // wild critters
     const pp = this.player.pos;
@@ -653,9 +668,13 @@ export class Game {
       this.runInteract(b);
       return;
     }
-    if (b && input.pressed("a")) {
+    if (b && input.pressed("a") && !this.player.airborne) {
       input.consume("a");
       this.runInteract(b);
+    } else if (!b && input.pressed("a")) {
+      // nothing to talk to → Ⓐ jumps
+      input.consume("a");
+      this.player.jump();
     }
   }
 
@@ -772,11 +791,12 @@ export class Game {
       return { target: t, alpha: f.alpha + this.camYaw, beta: f.beta, radius: f.radius * this.zoomMulClamped(0.9, 1.1) };
     }
     const fwd = -Math.PI / 2 + this.camYaw;
-    const t = new Vector3(pp.x - Math.cos(fwd) * 1.0, pp.y + 1.1, pp.z - Math.sin(fwd) * 1.0);
+    const t = new Vector3(pp.x - Math.cos(fwd) * 1.0, this.player.groundY + 1.1, pp.z - Math.sin(fwd) * 1.0);
     if (f?.follow) {
       return { target: t, alpha: f.alpha + this.camYaw, beta: f.beta, radius: f.radius * this.zoomMul };
     }
-    return { target: t, alpha: -Math.PI / 2 + this.camYaw, beta: CAM_BETA, radius: CAM_RADIUS * this.zoomMul };
+    const sprintZoom = this.player.sprinting && this.player.speed > 0.9 ? 1.07 : 1;
+    return { target: t, alpha: -Math.PI / 2 + this.camYaw, beta: CAM_BETA, radius: CAM_RADIUS * this.zoomMul * sprintZoom };
   }
 
   private zoomMulClamped(a: number, b: number) {

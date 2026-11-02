@@ -32,6 +32,32 @@ export class PlayerCtl {
   celebrate = 0;
   /** food buffs (zoomies) */
   speedMul = 1;
+  /** held sprint button this frame */
+  sprinting = false;
+  /** height above the ground while jumping */
+  jumpY = 0;
+  private vy = 0;
+  /** squash & stretch spring for jumps */
+  private squash = 0;
+  private squashV = 0;
+  /** ground height under the player (camera uses this so jumps don't bob the view) */
+  groundY = 0;
+  onLand: ((p: Vector3, hard: boolean) => void) | null = null;
+  onJump: (() => void) | null = null;
+
+  get airborne() {
+    return this.jumpY > 0.001 || this.vy > 0;
+  }
+
+  /** hop! (ignored while already in the air) */
+  jump() {
+    if (this.airborne) return false;
+    this.vy = 6.4;
+    this.squashV = 9;
+    audio.sfx("jump");
+    this.onJump?.();
+    return true;
+  }
   /** breadcrumb trail for followers */
   trail: Vector3[] = [];
   private trailDist = 0;
@@ -45,6 +71,8 @@ export class PlayerCtl {
     this.pos.set(x, y, z);
     this.rot = rot;
     this.vx = this.vz = 0;
+    this.vy = this.jumpY = 0;
+    this.groundY = y;
     this.trail = [];
     for (let i = 0; i < 40; i++) {
       this.trail.push(new Vector3(x - Math.sin(rot) * i * 0.3, y, z - Math.cos(rot) * i * 0.3));
@@ -64,10 +92,12 @@ export class PlayerCtl {
     const rx = fz,
       rz = -fx;
     const mag = Math.min(1, Math.hypot(mx, my));
-    const maxSpeed = (mag > 0.85 ? 6.8 : 4.6) * this.speedMul;
+    // walk → run (full stick) → sprint (hold the sprint button)
+    const base = this.sprinting && mag > 0.2 ? 9.6 : mag > 0.85 ? 6.8 : 4.6;
+    const maxSpeed = base * this.speedMul * (this.airborne ? 0.92 : 1);
     const tx = (rx * mx + fx * my) * maxSpeed;
     const tz = (rz * mx + fz * my) * maxSpeed;
-    const acc = mag > 0.05 ? 14 : 18;
+    const acc = (mag > 0.05 ? 14 : 18) * (this.airborne ? 0.45 : 1);
     this.vx += (tx - this.vx) * Math.min(1, acc * dt);
     this.vz += (tz - this.vz) * Math.min(1, acc * dt);
     const sp = Math.hypot(this.vx, this.vz);
@@ -83,8 +113,8 @@ export class PlayerCtl {
         this.trail.unshift(this.pos.clone());
         if (this.trail.length > 40) this.trail.pop();
       }
-      this.stepT += moved;
-      if (this.stepT > 1.15) {
+      if (!this.airborne) this.stepT += moved;
+      if (this.stepT > (sp > 8 ? 1.5 : 1.15)) {
         this.stepT = 0;
         audio.sfx("step", { volume: 0.5 });
         this.onStep?.(this.pos);
@@ -92,7 +122,28 @@ export class PlayerCtl {
     }
     this.speed = Math.min(1, sp / 6.8);
     const gy = ground(this.pos.x, this.pos.z);
-    this.pos.y += (gy - this.pos.y) * Math.min(1, 20 * dt);
+    this.groundY += (gy - this.groundY) * Math.min(1, 20 * dt);
+    // jump arc: snappy up, floaty top, quicker fall (feels good for little hands)
+    if (this.airborne) {
+      const g = this.vy > 0 ? 17 : 24;
+      this.vy -= g * dt;
+      this.jumpY += this.vy * dt;
+      if (this.jumpY <= 0) {
+        const hard = this.vy < -6;
+        this.jumpY = 0;
+        this.vy = 0;
+        this.squashV = -10;
+        audio.sfx("step", { volume: 0.8, pitch: 0.8 });
+        this.onLand?.(this.pos, hard);
+      }
+    }
+    this.pos.y = this.groundY + this.jumpY;
+    // squash & stretch spring
+    this.squashV += (-this.squash * 120 - this.squashV * 14) * dt;
+    this.squash += this.squashV * dt;
+    const air = this.airborne ? Math.max(-0.08, Math.min(0.1, this.vy * 0.02)) : 0;
+    const sy = 1 + this.squash * 0.18 + air;
+    this.model.root.scaling.set(1 / Math.sqrt(sy), sy, 1 / Math.sqrt(sy));
     this.sync();
     if (this.celebrate > 0) this.celebrate -= dt;
     this.model.update(dt, { speed: this.speed, celebrate: this.celebrate > 0 });
@@ -101,6 +152,12 @@ export class PlayerCtl {
   /** idle-animate without moving (dialogue, menus) */
   idle(dt: number, talking = false) {
     this.vx = this.vz = 0;
+    if (this.jumpY > 0) {
+      this.jumpY = Math.max(0, this.jumpY - dt * 6);
+      this.pos.y = this.groundY + this.jumpY;
+      this.sync();
+    }
+    this.vy = 0;
     this.speed = 0;
     this.model.update(dt, { speed: 0, talking, celebrate: this.celebrate > 0 });
     if (this.celebrate > 0) this.celebrate -= dt;
@@ -135,11 +192,12 @@ export class Follower {
     this.model.root.position.copyFrom(p);
     this.model.root.rotation.y = rot;
   }
-  update(dt: number, target: Vector3, ground: GroundFn) {
+  hopT = -1;
+  update(dt: number, target: Vector3, ground: GroundFn, leaderSpeed = 0) {
     const dx = target.x - this.pos.x,
       dz = target.z - this.pos.z;
     const d = Math.hypot(dx, dz);
-    const sp = SPECIES[this.owned.species].speed * 2.2;
+    const sp = Math.max(SPECIES[this.owned.species].speed * 2.2, leaderSpeed * 1.15);
     let want = 0;
     if (d > 0.35) want = Math.min(sp, d * 3.2);
     this.spd += (want - this.spd) * Math.min(1, 8 * dt);
@@ -155,6 +213,12 @@ export class Follower {
       this.pos.z = target.z;
     }
     this.pos.y = ground(this.pos.x, this.pos.z);
+    // copycat hop when the player jumps (hopT counts down a small delay, then runs a 0.42 s arc)
+    if (this.hopT !== -1) {
+      this.hopT += dt;
+      if (this.hopT > 0.42) this.hopT = -1;
+      else if (this.hopT > 0) this.pos.y += Math.sin((this.hopT / 0.42) * Math.PI) * 0.5;
+    }
     this.model.root.position.copyFrom(this.pos);
     this.model.root.rotation.y = this.rot;
     this.model.update(dt, { speed: Math.min(1, this.spd / sp) });
