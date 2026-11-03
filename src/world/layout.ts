@@ -133,6 +133,26 @@ export function nearPath(x: number, z: number, pad = 0): boolean {
 }
 
 /** Key locations */
+/**
+ * Raised ledges (heights in metres above the ground at their centre). A normal jump reaches ~1.2 m, Puffbun ~1.7 m,
+ * a double jump (Chirpy / unicorn) ~2.1 m and the giant frog ~2.3 m — so 1.85 m needs "double-jump class" moves.
+ * Stacks: later steps sit on top of earlier ones.
+ */
+export interface LedgeSpot {
+  id: string;
+  name: string;
+  x: number;
+  z: number;
+  steps: { r: number; h: number }[];
+  reward: { kind: string; n: number }[];
+}
+export const LEDGES: LedgeSpot[] = [
+  { id: "sunnymesa", name: "Sunny Mesa", x: 30, z: 68, steps: [{ r: 3.4, h: 1.85 }], reward: [{ kind: "dye_rose", n: 2 }, { kind: "dye_sunflower", n: 2 }, { kind: "dye_lavender", n: 2 }, { kind: "crystal", n: 2 }] },
+  { id: "mossytower", name: "Mossy Tower", x: -102, z: 18, steps: [{ r: 5.2, h: 1.0 }, { r: 2.8, h: 2.9 }], reward: [{ kind: "crystal", n: 5 }, { kind: "lure", n: 1 }, { kind: "dye_mint", n: 2 }] },
+  { id: "heronrock", name: "Heron Rock", x: 124, z: 18, steps: [{ r: 3.0, h: 1.85 }], reward: [{ kind: "dye_bluebell", n: 3 }, { kind: "pebble", n: 4 }, { kind: "cookie", n: 3 }] },
+  { id: "lookout", name: "Lookout Stump", x: -38, z: -8, steps: [{ r: 3.0, h: 1.85 }], reward: [{ kind: "petal", n: 6 }, { kind: "cookie", n: 3 }, { kind: "dye_poppy", n: 2 }] },
+];
+
 export const LOC: {
   buildings: Record<string, { x: number; z: number; rot: number }>;
   gateNorth: { x: number; z: number };

@@ -23,6 +23,7 @@ import {
   addBridge,
   addCaveMouth,
   addCliff,
+  addMesa,
   addGate,
   makeGrassField,
   makeMotes,
@@ -34,6 +35,7 @@ import {
 import { buildExterior, BUILDING_IDS, type BuildingId } from "../world/buildings";
 import { Batch, ball, blob, softBox, torus, softCyl, cone, lathe, disc } from "../render/Shapes";
 import { rng } from "../render/Palette";
+import { LEDGES } from "../world/layout";
 import { WORLD, LOC, heightAt, walkField, isWater, nearPath, ellipseD, POND, ZONE_SHAPES, zoneAt } from "../world/layout";
 import { WildCritter } from "./Actors";
 import { SPECIES, type SpeciesId, type ZoneId } from "../data/species";
@@ -152,6 +154,7 @@ export class Overworld {
       });
     }
     for (const p of LOC.garden) this.reserve(p.x, p.z, 2.4);
+    for (const l of LEDGES) this.reserve(l.x, l.z, l.steps[0].r + 2);
     this.reserve(LOC.garden[0].x - 4.1, LOC.garden[0].z + 1.5, 1.5);
     // café order board & tables on the bakery patio
     const bakeryExt = this.exteriors.find((e) => e.id === "bakery");
@@ -350,6 +353,8 @@ export class Overworld {
     progress(0.55, "Planting the hills…");
     await nextFrame();
 
+    this.buildLedges();
+
     /* ---------------- backdrop trees on the hills (thin instances) ---------------- */
     this.buildBackdrop(R);
 
@@ -529,6 +534,52 @@ export class Overworld {
         const flap = Math.sin(t * 18 + ph) * 0.9;
         hinges[0].rotation.z = flap;
         hinges[1].rotation.z = flap;
+      });
+    }
+  }
+
+  /** Double-jump ledges: rocky mesas with a treasure chest on top. */
+  private buildLedges() {
+    for (const l of LEDGES) {
+      const base = heightAt(l.x, l.z);
+      let y = base;
+      const c = this.chunk(l.x, l.z);
+      l.steps.forEach((st, i) => {
+        const pts: [number, number][] = [];
+        const n = 12;
+        for (let k = 0; k < n; k++) {
+          const a = (k / n) * Math.PI * 2;
+          const rr = st.r * (1 + Math.sin(a * 3 + i) * 0.05);
+          pts.push([l.x + Math.cos(a) * rr, l.z + Math.sin(a) * rr]);
+        }
+        const height = st.h - (y - base);
+        addMesa(c.main, pts, height, { y, seed: l.id.length * 7 + i, decor: true });
+        y = base + st.h;
+        this.collision.ledges.push({ x: l.x, z: l.z, r: st.r, top: base + st.h });
+      });
+      const top = new Vector3(l.x, y, l.z);
+      const chest = this.makeChest(top);
+      chest.parent = this.root;
+      const key = "ledge_" + l.id;
+      this.interacts.push({
+        id: key,
+        pos: top,
+        r: 1.9,
+        h: 1.4,
+        label: () => (this.g.state.taken.includes(key) ? "Empty chest" : "Open"),
+        run: async () => {
+          if (this.g.state.taken.includes(key)) {
+            await this.g.ui.say([{ text: `The ${l.name} chest is empty. What a view from up here!` }]);
+            return;
+          }
+          this.g.state.taken.push(key);
+          this.openChest(chest);
+          audio.jingle("fanfare");
+          this.g.fx.sparkles(top.add(new Vector3(0, 1, 0)), 24);
+          for (const r of l.reward) this.g.give(r.kind, r.n);
+          await this.g.ui.say([{ text: `✨ You reached the top of *${l.name}* and found treasure! High places hide the best goodies.` }]);
+          this.g.save();
+        },
       });
     }
   }

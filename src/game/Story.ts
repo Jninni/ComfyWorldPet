@@ -120,6 +120,15 @@ export const QUESTS: Record<string, QuestDef> = {
     stages: ["Enter the Thornwild (north-east of Whisper Meadow)", "Free the trapped guardians", "Calm the Gloom King", "Tell Professor Hoot"],
     targets: { 1: 3 },
   },
+  fishing: {
+    id: "fishing",
+    name: "Gone Fishing",
+    giver: "marina",
+    icon: "🎣",
+    color: "var(--sky)",
+    stages: ["Catch 3 different kinds of fish", "Show Marina your catches"],
+    targets: { 0: 3 },
+  },
   haven: {
     id: "haven",
     name: "Critter Haven",
@@ -205,6 +214,14 @@ export class Story {
     if (what === "harvest" && this.stage("bakery") === 1) this.advance("bakery");
   }
 
+  onFish() {
+    const q = this.g.state.quests.fishing;
+    if (!q || q.done || q.stage !== 0) return;
+    q.progress = Object.keys(this.g.state.fishLog).length;
+    if (q.progress >= 3) this.advance("fishing");
+    else this.g.refreshQuestUI(true);
+  }
+
   onGuardianFreed() {
     const q = this.g.state.quests.thornwild;
     if (!q || q.done || q.stage !== 1) return;
@@ -250,7 +267,7 @@ export class Story {
 
   /** Main quest tracker text, else first active side quest. */
   tracked(): { id: string; title: string; text: string; icon: string } | null {
-    const order = ["main", "thornwild", "bakery", "thief", "sewing", "tea", "bouquet", "yarn", "hide", "pebbles", "haven"];
+    const order = ["main", "thornwild", "fishing", "bakery", "thief", "sewing", "tea", "bouquet", "yarn", "hide", "pebbles", "haven"];
     for (const id of order) {
       if (this.active(id)) return { id, title: QUESTS[id].name, text: this.objective(id), icon: QUESTS[id].icon };
     }
@@ -326,7 +343,10 @@ export class Story {
       case "mocha":
         return m >= 5 && (!this.g.state.quests.bakery || (this.active("bakery") && this.stage("bakery") === 4) || (this.done("bakery") && !this.g.state.quests.thief) || (this.active("thief") && this.stage("thief") === 2));
       case "marina":
-        return m >= 5 && (!this.g.state.quests.pebbles || (this.active("pebbles") && this.stage("pebbles") === 1));
+        return (
+          m >= 5 &&
+          (!this.g.state.quests.fishing || (this.active("fishing") && this.stage("fishing") === 1) || (this.done("fishing") && !this.g.state.quests.pebbles) || (this.active("pebbles") && this.stage("pebbles") === 1))
+        );
       case "pip":
         return m >= 5 && (!this.g.state.quests.hide || (this.active("hide") && this.stage("hide") >= 3));
     }
@@ -661,7 +681,28 @@ export class Story {
 
       case "marina": {
         const W = who("marina");
-        if (!g.state.quests.pebbles) {
+        if (!g.state.quests.fishing) {
+          await say([
+            { ...W, text: "Ahoy, matey! Ever been *fishing*? Sparkle Pond is full of the cutest fish!" },
+            { ...W, text: "Here — take my spare *Fishing Rod*. Look for the *ripples* on the water, stand at the shore and press the action button." },
+          ]);
+          g.give("rod", 1);
+          await say([
+            { ...W, text: "Wait for a nibble... when the bobber *dips*, tap quick! Then *hold* to lift the net and keep it on the fish." },
+            { ...W, text: "Catch *3 different kinds* and come show me! Oh, and you might fish up a silly old boot. Happens to the best of us!" },
+          ]);
+          this.start("fishing");
+        } else if (this.active("fishing") && this.stage("fishing") === 0) {
+          await say([{ ...W, text: `You've found ${Object.keys(g.state.fishLog).length} kinds so far! Rare fish bite less often — keep trying!` }]);
+        } else if (this.active("fishing") && this.stage("fishing") === 1) {
+          await say([
+            { ...W, text: "Look at all those! You're a natural angler!" },
+            { ...W, text: "Here's my *Lucky Lure*. Rare fish — like the legendary *Golden Koi* — will bite more often now!" },
+            { ...W, text: "Tip: Mocha can bake *Fishy Pie* from 2 Fish and 1 Wheat. Critters go wild for it!" },
+          ]);
+          g.give("lure", 1);
+          this.complete("fishing");
+        } else if (!g.state.quests.pebbles) {
           await say([
             { ...W, text: "Ahoy! I'm practising skipping stones, but I've run out of good flat pebbles." },
             { ...W, text: "Could you find *4 Pebbles* for me? They sparkle along the shore." },
@@ -675,7 +716,8 @@ export class Story {
           g.give("cookie", 3);
           this.complete("pebbles");
         } else {
-          await say([{ ...W, text: "The pond is extra sparkly today. Ducklings love following snacks, you know!" }]);
+          const lines = ["The pond is extra sparkly today. Ducklings love following snacks, you know!", "Have you caught a Golden Koi yet? They say it brings good luck!", "Moon Jellies glow softly... I love watching them at dusk."];
+          await say([{ ...W, text: lines[Math.floor(Math.random() * lines.length)] }]);
         }
         break;
       }
@@ -708,7 +750,12 @@ export class Story {
           g.unlockHat("bunnyears");
           this.complete("hide");
         } else {
-          await say([{ ...W, text: "When I grow up, I'm gonna befriend EVERY critter. Even the glowy ones!" }]);
+          const lines = [
+            "When I grow up, I'm gonna befriend EVERY critter. Even the glowy ones!",
+            "Psst! I saw shiny treasure chests on top of really tall rocks. You'd need a DOUBLE jump to get up there! Chirpy can help — or ride a unicorn!",
+            "The tallest place is Mossy Tower in the woods. Hop on the low step first, then double jump to the top!",
+          ];
+          await say([{ ...W, text: lines[Math.floor(Math.random() * lines.length)] }]);
         }
         break;
       }

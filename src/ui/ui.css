@@ -1301,3 +1301,331 @@ body.touch .dialogue {
     top: calc(64px + var(--safe-t));
   }
 }
+
+/* ---------- pet card ---------- */
+.party-face {
+  position: relative;
+  pointer-events: auto;
+  cursor: pointer;
+}
+.party-strip {
+  pointer-events: auto;
+}
+.pf-lv {
+  position: absolute;
+  right: -2px;
+  bottom: -2px;
+  min-width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  background: var(--butter);
+  border: 2px solid var(--ink);
+  font-size: 12px;
+  font-weight: 700;
+  display: grid;
+  place-items: center;
+}
+.pet-card {
+  width: min(640px, calc(100vw - 28px));
+}
+.pet-top {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+}
+.pet-pic {
+  width: 170px;
+  height: 170px;
+  flex: none;
+  border-radius: 50%;
+  border: 4px solid var(--ink);
+  background: radial-gradient(circle at 50% 35%, #fff 0%, var(--c) 120%);
+  overflow: hidden;
+}
+.pet-portrait {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+.pet-name {
+  font-size: 28px;
+  font-weight: 600;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.pet-name .badge {
+  position: static;
+}
+.pet-perk {
+  font-size: 15px;
+  margin-top: 4px;
+}
+.pet-xp {
+  margin: 6px 0 4px;
+}
+.px-l {
+  font-weight: 600;
+  font-size: 15px;
+}
+.px-bar,
+.ps-bar {
+  height: 14px;
+  border: 3px solid var(--ink);
+  border-radius: 999px;
+  background: var(--cream);
+  overflow: hidden;
+}
+.px-fill {
+  height: 100%;
+  background: repeating-linear-gradient(45deg, var(--butter-d) 0 8px, var(--butter) 8px 16px);
+}
+.pet-stats {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.pet-stat {
+  display: grid;
+  grid-template-columns: 150px 1fr 120px;
+  gap: 10px;
+  align-items: center;
+  font-weight: 600;
+  font-size: 15px;
+}
+.ps-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--pink), var(--lav));
+}
+.ps-t {
+  text-align: right;
+  font-size: 14px;
+}
+.pet-acts {
+  justify-content: center;
+  margin-top: 14px;
+}
+.pet-acts .btn {
+  font-size: 16px;
+  min-height: 46px;
+  padding: 6px 14px;
+}
+@media (max-width: 760px), (max-height: 520px) {
+  .pet-pic {
+    width: 110px;
+    height: 110px;
+  }
+  .pet-stat {
+    grid-template-columns: 110px 1fr 90px;
+    font-size: 13px;
+  }
+  .pet-name {
+    font-size: 22px;
+  }
+}
+
+/* ---------- fishing ---------- */
+.fish-ui {
+  position: absolute;
+  inset: 0;
+  z-index: 25;
+}
+.fish-msg {
+  position: absolute;
+  left: 50%;
+  top: 22%;
+  transform: translateX(-50%);
+  background: var(--white);
+  border: 3px solid var(--ink);
+  border-radius: 999px;
+  padding: 8px 20px;
+  font-size: 22px;
+  font-weight: 600;
+  box-shadow: 0 4px 0 rgba(74, 58, 82, 0.25);
+  white-space: nowrap;
+  pointer-events: none;
+}
+.fish-msg .fi {
+  margin-right: 8px;
+}
+.fish-msg.urgent {
+  background: var(--butter);
+  animation: focusPulse 0.4s ease-in-out infinite;
+  font-size: 26px;
+}
+.reel-box {
+  position: absolute;
+  right: calc(30px + var(--safe-r));
+  top: 50%;
+  transform: translateY(-50%);
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: center;
+  animation: popIn 0.3s cubic-bezier(0.3, 1.5, 0.5, 1) both;
+  touch-action: none;
+}
+.reel-cols {
+  display: flex;
+  gap: 10px;
+}
+.reel-bar {
+  position: relative;
+  width: 70px;
+  height: min(52vh, 380px);
+  border: 4px solid var(--ink);
+  border-radius: 22px;
+  background: linear-gradient(#bfe7f8, #6fb9e2);
+  overflow: hidden;
+}
+.reel-net {
+  position: absolute;
+  left: 4px;
+  right: 4px;
+  border-radius: 14px;
+  background: rgba(255, 246, 214, 0.55);
+  border: 3px dashed var(--ink);
+  transition: background 0.1s;
+}
+.reel-net.on {
+  background: rgba(191, 233, 214, 0.85);
+}
+.reel-fish {
+  position: absolute;
+  left: 50%;
+  transform: translate(-50%, 50%);
+  font-size: 34px;
+  filter: drop-shadow(0 2px 0 rgba(74, 58, 82, 0.4));
+}
+.reel-meter {
+  width: 22px;
+  border: 4px solid var(--ink);
+  border-radius: 999px;
+  background: var(--cream);
+  overflow: hidden;
+  display: flex;
+  align-items: flex-end;
+}
+.reel-fill {
+  width: 100%;
+  background: linear-gradient(var(--mint-d), var(--mint));
+}
+.reel-btn {
+  font-size: 20px;
+  min-height: 64px;
+  min-width: 160px;
+}
+
+/* ---------- mini-map ---------- */
+.minimap {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 10px);
+  width: 132px;
+  height: 132px;
+  border-radius: 50%;
+  border: 4px solid var(--ink);
+  box-shadow: 0 4px 0 rgba(74, 58, 82, 0.25), inset 0 0 0 4px var(--white);
+  overflow: hidden;
+  cursor: pointer;
+  pointer-events: auto;
+  background: #8cc484;
+}
+.hud-top {
+  position: absolute;
+}
+.minimap canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+.mm-label {
+  position: absolute;
+  left: 50%;
+  bottom: 14px;
+  transform: translateX(-50%);
+  font-size: 12px;
+  font-weight: 700;
+  color: #fff;
+  -webkit-text-stroke: 2px var(--ink);
+  paint-order: stroke fill;
+  white-space: nowrap;
+}
+.mm-n {
+  position: absolute;
+  left: 50%;
+  top: 2px;
+  transform: translateX(-50%);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--ink);
+  opacity: 0.6;
+}
+.toasts {
+  top: calc(230px + var(--safe-t));
+}
+.map-modal {
+  width: min(1100px, calc(100vw - 24px));
+  height: min(760px, calc(100vh - 24px));
+}
+.mapview {
+  position: relative;
+  flex: 1;
+  min-height: 240px;
+  border: 3px solid var(--ink);
+  border-radius: 18px;
+  overflow: hidden;
+  touch-action: none;
+}
+.map-tab .mapview {
+  height: min(56vh, 520px);
+}
+.mapview canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+  cursor: grab;
+}
+.map-tools {
+  position: absolute;
+  right: 10px;
+  top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.map-tools .round-btn {
+  --c: var(--white);
+  width: 50px;
+  height: 50px;
+  font-size: 24px;
+}
+.map-legend {
+  position: absolute;
+  left: 10px;
+  bottom: 10px;
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  max-width: 80%;
+  pointer-events: none;
+}
+.map-legend span {
+  background: rgba(255, 253, 248, 0.92);
+  border: 2px solid var(--ink);
+  border-radius: 999px;
+  padding: 2px 10px;
+  font-size: 13px;
+  font-weight: 600;
+}
+@media (max-width: 760px), (max-height: 520px) {
+  .minimap {
+    width: 96px;
+    height: 96px;
+  }
+  .toasts {
+    top: calc(160px + var(--safe-t));
+  }
+}

@@ -13,6 +13,10 @@ import { PlayerCtl, Follower, WildCritter, Npc, type GroundFn } from "./Actors";
 import { Story, QUESTS } from "./Story";
 import { Life } from "./Life";
 import { Combat } from "./Combat";
+import { Fishing } from "./Fishing";
+import { levelOf, levelScale } from "./Pets";
+import { openPetCard } from "../ui/PetCard";
+import { MiniMap, openFullMap } from "../ui/MiniMap";
 import { buildThornwild, buildThornGate, type ThornwildDef } from "../world/thornwild";
 
 /** Rider-class critters: how they ride. */
@@ -73,6 +77,8 @@ export class Game {
   story: Story;
   life!: Life;
   combat!: Combat;
+  fishing!: Fishing;
+  minimap!: MiniMap;
   private thornGate: ReturnType<typeof buildThornGate> | null = null;
   private bubbles: { w: WildCritter; mesh: Mesh; hp: number }[] = [];
   private bossStarted = false;
@@ -100,6 +106,8 @@ export class Game {
   private haven: WildCritter[] = [];
   private saveTimer = 0;
   private enteredAt = 0;
+  private lastPet = new Map<number, number>();
+  private xpTick = 0;
   /** the party critter you're riding */
   riding: { f: Follower; scale: number; seat: number } | null = null;
   private trailT = 0;
@@ -190,7 +198,7 @@ export class Game {
       id: "overworld",
       root: this.world.root,
       collision: this.world.collision,
-      ground: (x, z) => heightAt(x, z),
+      ground: (x, z) => this.world.collision.ledgeTop(x, z) ?? heightAt(x, z),
       interacts: this.world.interacts,
       frame: null,
       lighting: OUTDOOR_LIGHT,
@@ -225,8 +233,12 @@ export class Game {
     this.life = new Life(this);
     this.life.initGarden();
     this.life.initCrumbs();
+    this.fishing = new Fishing(this);
+    this.fishing.init();
+    this.minimap = new MiniMap(this);
     this.combat = new Combat(this);
     this.combat.onBossDefeated = () => this.onBossDefeated();
+    this.combat.onEnemyDefeated = (kind) => this.addPartyXp(kind === "gloomking" ? 40 : 4, (c) => SPECIES[c.species].role === "guardian");
     // tuckered out mid-boss-fight: reopen the arena so you can walk back in and try again
     this.combat.onKnockedOut = () => this.setBossGate(false);
     this.initThornGate();
@@ -626,6 +638,14 @@ export class Game {
     for (const n of this.npcs.values()) if (n.location === L.id) n.update(dt, pp);
     L.update?.(dt, this.time);
     if (this.mode !== "title") this.life.update(dt);
+    if (playing) {
+      this.xpTick += dt;
+      for (const f of this.followers) f.owned.together = (f.owned.together ?? 0) + dt;
+      if (this.xpTick >= 12) {
+        this.xpTick = 0;
+        this.addPartyXp(1);
+      }
+    }
     if (this.combat?.active) {
       this.combat.update(dt, playing);
       this.updateThornwild(dt);
@@ -663,6 +683,7 @@ export class Game {
     }
     this.updateCamera(dt, L);
     this.updateGuide(playing);
+    this.minimap?.update(dt);
     if (this.hintEl && playing) {
       this.hintMoved += this.player.speed * dt;
       if (this.hintMoved > 1.5) this.hideHint();
@@ -1322,8 +1343,9 @@ export class Game {
     const p = this.player;
     const best = (s: SpeciesId) => this.bestFriendship(s) >= 5;
     let speed = this.life.buffActive("zoomies") ? 1.35 : 1;
-    if (this.partyHas("fennix")) speed *= best("fennix") ? 1.3 : 1.2;
-    let jump = this.partyHas("puffbun") ? (best("puffbun") ? 1.7 : 1.45) : 1;
+    const lv = (s: SpeciesId) => levelScale(this.followers.find((f) => f.owned.species === s)?.owned);
+    if (this.partyHas("fennix")) speed *= 1 + (best("fennix") ? 0.3 : 0.2) * lv("fennix");
+    let jump = this.partyHas("puffbun") ? 1 + (best("puffbun") ? 0.7 : 0.45) * lv("puffbun") : 1;
     let jumps = this.partyHas("chirpy") ? 2 : 1;
     p.canGlide = this.partyHas("glowbat");
     const r = this.riding;
@@ -1454,15 +1476,62 @@ export class Game {
     w.model.emote("happy");
     audio.voice(w.species, "happy");
     this.fx.hearts(w.pos.add(new Vector3(0, w.model.height, 0)), 6);
-    const party = this.state.critters.filter((c) => c.inParty);
-    const choices = party.length < PARTY_MAX ? ["Join my party!", "Keep playing"] : ["Keep playing"];
-    const c = await this.ui.say([{ text: `*${owned.name}* is having lots of fun in Critter Haven!`, choices }]);
-    if (party.length < PARTY_MAX && c === 0) {
-      owned.inParty = true;
-      this.rebuildFollowers();
-      this.rebuildHaven();
-      this.ui.toast(`${owned.name} joined your party!`, "🐾", "var(--pink)");
+    await openPetCard(this, owned.uid);
+  }
+
+  /* ---------------- pets: petting, treats, xp ---------------- */
+
+  /** Pet a friend: hearts, a little bond (every 5 pets = +1 friendship heart), a little xp. */
+  async petCritter(uid: number): Promise<"happy" | "love"> {
+    const c = this.state.critters.find((x) => x.uid === uid);
+    if (!c) return "happy";
+    const now = Date.now();
+    const last = (this.lastPet.get(uid) ?? 0) as number;
+    this.lastPet.set(uid, now);
+    if (now - last < 1500) return "happy";
+    c.bond = (c.bond ?? 0) + 1;
+    this.giveXp(c, 1);
+    audio.sfx("heart");
+    if (c.bond >= 5 && (c.friendship ?? 1) < 5) {
+      c.bond = 0;
+      c.friendship = (c.friendship ?? 1) + 1;
+      this.ui.toast(`${c.name} loves you even more! 💗 ${c.friendship}/5`, "💗", "var(--pink)");
+      this.save();
+      return "love";
     }
+    return "happy";
+  }
+
+  /** Give one critter a share-treat: +1 heart (+2 for Fishy Pie) and xp. */
+  feedOne(uid: number, food: FoodId) {
+    const c = this.state.critters.find((x) => x.uid === uid);
+    if (!c || !this.count(food)) return;
+    this.take(food, 1);
+    c.friendship = Math.min(5, (c.friendship ?? 1) + (food === "fishpie" ? 2 : 1));
+    this.giveXp(c, 10);
+    audio.jingle("newfriend");
+    this.ui.toast(`${c.name} gobbled up the ${FOODS[food].name}!`, FOODS[food].icon, "var(--butter)");
+    this.save();
+  }
+
+  giveXp(c: OwnedCritter, n: number) {
+    const before = levelOf(c);
+    c.xp = (c.xp ?? 0) + n;
+    const after = levelOf(c);
+    if (after > before) {
+      audio.sfx("levelup");
+      this.ui.toast(`${c.name} reached level ${after}! ⭐`, "⭐", "var(--butter)");
+      const f = this.followers.find((x) => x.owned.uid === c.uid);
+      if (f) {
+        f.model.emote("happy");
+        this.fx.sparkles(f.pos.add(new Vector3(0, f.model.height, 0)), 16);
+      }
+      this.refreshParty();
+    }
+  }
+
+  addPartyXp(n: number, only?: (c: OwnedCritter) => boolean) {
+    for (const f of this.followers) if (!only || only(f.owned)) this.giveXp(f.owned, n);
   }
 
   setPartyMember(uid: number, inParty: boolean) {
@@ -1481,8 +1550,14 @@ export class Game {
     strip.innerHTML = "";
     for (const c of this.state.critters.filter((x) => x.inParty)) {
       const info = SPECIES[c.species];
-      const face = h(".party-face", { "--c": info.color, title: c.name });
-      face.append(portrait(c.species, info.color, 96));
+      const face = h(".party-face", { "--c": info.color, title: `${c.name} — tap to see stats` });
+      face.append(portrait(c.species, info.color, 96), h(".pf-lv", null, String(levelOf(c))));
+      face.addEventListener("pointerdown", (e) => {
+        e.stopPropagation();
+        if (this.mode !== "play") return;
+        this.mode = "busy";
+        openPetCard(this, c.uid).then(() => (this.mode = "play"));
+      });
       strip.append(face);
     }
   }
@@ -1596,6 +1671,7 @@ export class Game {
       }
     }
     this.player.face(node.pos);
+    this.addPartyXp(2);
     this.fx.sparkles(node.pos.add(new Vector3(0, 0.6, 0)), 14);
     audio.sfx("pickup");
     this.give(node.kind, n);

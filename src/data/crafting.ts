@@ -4,7 +4,7 @@ import type { ResourceId } from "./items";
 /* Ingredients & gardening                                             */
 /* ================================================================== */
 
-export type IngredientId = "wheat" | "carrot" | "strawberry" | "pumpkin" | "apple" | "mushroom" | "honey";
+export type IngredientId = "wheat" | "carrot" | "strawberry" | "pumpkin" | "apple" | "mushroom" | "honey" | "fish";
 
 export const INGREDIENTS: Record<IngredientId, { name: string; icon: string; color: string; where: string }> = {
   wheat: { name: "Wheat", icon: "🌾", color: "#f5cf6b", where: "Grow it in your garden" },
@@ -14,6 +14,7 @@ export const INGREDIENTS: Record<IngredientId, { name: string; icon: string; col
   apple: { name: "Apples", icon: "🍎", color: "#f47a7a", where: "Apple baskets under fruit trees" },
   mushroom: { name: "Mushrooms", icon: "🍄", color: "#e9b8d9", where: "Mossy Woods" },
   honey: { name: "Honey", icon: "🍯", color: "#f5cf6b", where: "Beehives in Whisper Meadow" },
+  fish: { name: "Fish", icon: "🐟", color: "#9fd3f2", where: "Go fishing at Sparkle Pond" },
 };
 
 export type CropId = "wheat" | "carrot" | "strawberry" | "pumpkin";
@@ -29,7 +30,7 @@ export const CROPS: Record<CropId, { name: string; icon: string; growSec: number
 /* Cooking                                                             */
 /* ================================================================== */
 
-export type FoodId = "cookie" | "tart" | "carrotcake" | "applepie" | "soup" | "muffin" | "shortcake";
+export type FoodId = "cookie" | "tart" | "carrotcake" | "applepie" | "soup" | "muffin" | "shortcake" | "fishpie";
 export type BuffId = "zoomies" | "lucky" | "cozy" | "helpful";
 
 export interface FoodInfo {
@@ -52,6 +53,7 @@ export const FOODS: Record<FoodId, FoodInfo> = {
   soup: { name: "Mushroom Soup", icon: "🍲", desc: "A cozy belly makes the next 3 befriending games easier.", use: "eat", buff: "cozy", amount: 3 },
   muffin: { name: "Pumpkin Muffin", icon: "🧁", desc: "Share with your party: they sniff out every gathering spot so it's ready again.", use: "share" },
   shortcake: { name: "Strawberry Shortcake", icon: "🍓", desc: "Share with your party: each friend brings you a little present!", use: "share" },
+  fishpie: { name: "Fishy Pie", icon: "🥧", desc: "Share with your party: a super treat — 2 friendship hearts for everyone!", use: "share" },
 };
 
 export const BUFFS: Record<BuffId, { name: string; icon: string }> = {
@@ -76,6 +78,7 @@ export const RECIPES: Recipe[] = [
   { id: "applepie", cost: { wheat: 1, apple: 3 } },
   { id: "muffin", cost: { pumpkin: 1, wheat: 1, honey: 1 } },
   { id: "shortcake", cost: { strawberry: 2, wheat: 1, honey: 1 } },
+  { id: "fishpie", cost: { fish: 2, wheat: 1 } },
 ];
 
 /* ================================================================== */

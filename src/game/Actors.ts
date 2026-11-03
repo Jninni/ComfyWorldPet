@@ -132,7 +132,7 @@ export class PlayerCtl {
     this.vz += (tz - this.vz) * Math.min(1, acc * dt);
     const sp = Math.hypot(this.vx, this.vz);
     if (sp > 0.05) {
-      const r = world.move(this.pos.x, this.pos.z, this.vx * dt, this.vz * dt, this.radius);
+      const r = world.move(this.pos.x, this.pos.z, this.vx * dt, this.vz * dt, this.radius, this.groundY + this.jumpY);
       const moved = Math.hypot(r.x - this.pos.x, r.z - this.pos.z);
       this.pos.x = r.x;
       this.pos.z = r.z;
@@ -152,7 +152,19 @@ export class PlayerCtl {
     }
     this.speed = Math.min(1, sp / 6.8);
     const gy = ground(this.pos.x, this.pos.z);
-    this.groundY += (gy - this.groundY) * Math.min(1, 20 * dt);
+    const feet = this.groundY + this.jumpY;
+    if (gy < this.groundY - 0.35) {
+      // walked off a ledge → fall
+      this.jumpY = feet - gy;
+      this.groundY = gy;
+      if (this.vy > 0) this.vy = 0;
+      this.vy -= 0.01;
+    } else if (gy > this.groundY + 0.35) {
+      // landed on (or hopped up onto) higher ground
+      this.jumpY = Math.max(0, feet - gy);
+      this.groundY = gy;
+      if (this.jumpY <= 0.001) this.vy = 0;
+    } else this.groundY += (gy - this.groundY) * Math.min(1, 20 * dt);
     // jump arc: snappy up, floaty top, quicker fall (feels good for little hands)
     if (this.airborne) {
       this.gliding = this.canGlide && this.jumpHeld && this.vy < 0;

@@ -1,6 +1,7 @@
 import { DEFAULT_LOOK } from "../entities/characterModels";
 import type { SpeciesId } from "../data/species";
 import type { ResourceId, BuildableId } from "../data/items";
+import type { FishId } from "../data/fishing";
 import type { IngredientId, FoodId, DyeId, CropId, BuffId, Garment, CafeOrder } from "../data/crafting";
 
 export interface PlayerLookState {
@@ -21,6 +22,12 @@ export interface OwnedCritter {
   name: string;
   inParty: boolean;
   friendship: number;
+  /** experience from adventuring together (levels 1–10) */
+  xp?: number;
+  /** petting builds bond; every 5 bond = +1 friendship heart */
+  bond?: number;
+  /** seconds spent in your party */
+  together?: number;
 }
 
 export interface QuestState {
@@ -65,6 +72,8 @@ export interface GameState {
   nextGarmentUid: number;
   orders: CafeOrder[];
   ordersRefreshAt: number;
+  // ---- v3: fishing ----
+  fishLog: Partial<Record<FishId, { count: number; best: number }>>;
 }
 
 export const PARTY_MAX = 3;
@@ -72,7 +81,7 @@ const KEY = "cwp.save.v1";
 
 export function newState(): GameState {
   return {
-    version: 2,
+    version: 3,
     playerName: "Sunny",
     look: { ...DEFAULT_LOOK },
     location: { where: "home", x: 0, z: 0, rot: 0 },
@@ -87,7 +96,7 @@ export function newState(): GameState {
     hats: ["none"],
     playTime: 0,
     taken: [],
-    ingredients: { wheat: 0, carrot: 0, strawberry: 0, pumpkin: 0, apple: 0, mushroom: 0, honey: 0 },
+    ingredients: { wheat: 0, carrot: 0, strawberry: 0, pumpkin: 0, apple: 0, mushroom: 0, honey: 0, fish: 0 },
     foods: {},
     dyes: {},
     garden: [0, 1, 2, 3].map(() => ({ crop: null, plantedAt: 0, watered: false })),
@@ -97,6 +106,7 @@ export function newState(): GameState {
     nextGarmentUid: 1,
     orders: [],
     ordersRefreshAt: 0,
+    fishLog: {},
   };
 }
 
@@ -118,7 +128,7 @@ export function loadState(): GameState | null {
     return {
       ...base,
       ...s,
-      version: 2,
+      version: 3,
       look: { ...base.look, ...s.look },
       resources: { ...base.resources, ...s.resources },
       ingredients: { ...base.ingredients, ...(s.ingredients ?? {}) },

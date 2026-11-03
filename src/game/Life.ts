@@ -118,7 +118,8 @@ export class Life {
     this.g.take(id, 1);
     audio.jingle("newfriend");
     for (const fl of party) {
-      fl.owned.friendship = Math.min(5, (fl.owned.friendship ?? 1) + 1);
+      fl.owned.friendship = Math.min(5, (fl.owned.friendship ?? 1) + (id === "fishpie" ? 2 : 1));
+      this.g.giveXp(fl.owned, 8);
       fl.model.emote("love");
       audio.voice(fl.owned.species, "happy");
       this.g.fx.hearts(fl.pos.add(new Vector3(0, fl.model.height, 0)), 8);

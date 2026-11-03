@@ -6,6 +6,10 @@ import { hasSave, clearSave, PARTY_MAX } from "../core/State";
 import { SPECIES, SPECIES_IDS, ZONE_INFO, ROLES } from "../data/species";
 import { RESOURCES, KEY_ITEMS, BUILDABLES, type BuildableId, type ResourceId } from "../data/items";
 import { QUESTS } from "../game/Story";
+import { openPetCard } from "./PetCard";
+import { createMapView } from "./MiniMap";
+import { levelOf } from "../game/Pets";
+import { FISH, FISH_IDS } from "../data/fishing";
 import { FOODS, INGREDIENTS, DYES, PATTERNS, type FoodId, type IngredientId, type DyeId } from "../data/crafting";
 import { LOOK_OPTIONS, NPC_INFO, type PlayerLook, type HatId } from "../entities/characterModels";
 import { WORLD, ZONE_SHAPES, PATHS, POND, LOC, walkField } from "../world/layout";
@@ -186,7 +190,7 @@ export function showCreator(g: Game): Promise<{ look: PlayerLook; name: string }
 /* Pause menu                                                          */
 /* ================================================================== */
 
-type Tab = "quests" | "critters" | "party" | "bag" | "map" | "style" | "settings";
+type Tab = "quests" | "critters" | "party" | "bag" | "map" | "fish" | "style" | "settings";
 
 export function openPauseMenu(g: Game, startTab: Tab = "quests"): Promise<void> {
   return new Promise((resolve) => {
@@ -207,6 +211,7 @@ export function openPauseMenu(g: Game, startTab: Tab = "quests"): Promise<void> 
       ["party", "🐾 Party"],
       ["bag", "🎒 Items"],
       ["map", "🗺️ Map"],
+      ["fish", "🎣 Fish"],
       ["style", "🎀 Style"],
       ["settings", "⚙️"],
     ];
@@ -323,7 +328,7 @@ function renderTab(g: Game, tab: Tab, rerender: () => void): HTMLElement {
     case "party": {
       const wrap = h("div");
       const inParty = s.critters.filter((c) => c.inParty).length;
-      wrap.append(h("p", { style: { textAlign: "center", margin: "0 0 10px", fontWeight: "600" } }, `Party ${inParty} / ${PARTY_MAX} — tap a friend to bring them along or send them to Critter Haven`));
+      wrap.append(h("p", { style: { textAlign: "center", margin: "0 0 10px", fontWeight: "600" } }, `Party ${inParty} / ${PARTY_MAX} — tap a friend to see their stats, pet them, or swap them in and out`));
       wrap.append(
         h(
           ".row",
@@ -342,17 +347,14 @@ function renderTab(g: Game, tab: Tab, rerender: () => void): HTMLElement {
               "data-nav": "",
               "--c": info.color,
               style: c.inParty ? { background: "var(--butter)" } : undefined,
-              onclick: () => {
-                const ok = g.setPartyMember(c.uid, !c.inParty);
-                if (!ok) {
-                  audio.sfx("fail");
-                  g.ui.toast("Your party is full (3)!", "🐾", "var(--pink)");
-                } else audio.sfx("confirm");
+              onclick: async () => {
+                audio.sfx("confirm");
+                await openPetCard(g, c.uid);
                 rerender();
               },
             },
             h(".portrait", null, portrait(c.species, info.color, 128)),
-            h(".nm", null, c.name),
+            h(".nm", null, `${c.name} · Lv ${levelOf(c)}`),
             h(".sub", null, c.inParty ? "🐾 In party" : "🏡 In Haven"),
             h(".role-badge", { "--c": ROLES[info.role].color, title: info.talent }, `${ROLES[info.role].icon} ${ROLES[info.role].name}`),
             h(".hearts", { title: "Friendship — share treats to fill it!" }, "💗".repeat(Math.min(5, c.friendship ?? 1)) + "🤍".repeat(Math.max(0, 5 - (c.friendship ?? 1)))),
@@ -438,8 +440,30 @@ function renderTab(g: Game, tab: Tab, rerender: () => void): HTMLElement {
       }
       return wrap;
     }
+    case "fish": {
+      const wrap = h("div");
+      const caught = FISH_IDS.filter((f) => s.fishLog[f]);
+      wrap.append(h("p", { style: { textAlign: "center", margin: "0 0 10px", fontWeight: "600" } }, s.keyItems.rod ? `Fish Log: ${caught.length} / ${FISH_IDS.length} kinds caught — look for ripples at Sparkle Pond!` : "Marina at Sparkle Pond can teach you to fish!"));
+      const grid = h(".grid");
+      for (const id of FISH_IDS) {
+        const f = FISH[id];
+        const e = s.fishLog[id];
+        grid.append(
+          h(
+            ".card" + (e ? "" : ".locked"),
+            { "data-nav": "" },
+            h(".portrait", { style: { display: "grid", placeItems: "center", fontSize: "52px", background: e ? f.color : "#ccc" } }, e ? f.icon : "❔"),
+            h(".nm", null, e ? f.name : "???"),
+            h(".sub", null, e ? (f.junk ? `Found ×${e.count}` : `×${e.count} · best ${e.best} cm`) : "Not caught yet"),
+            h(".sub", null, e ? f.desc : "★".repeat(Math.min(5, f.difficulty))),
+          ),
+        );
+      }
+      wrap.append(grid);
+      return wrap;
+    }
     case "map":
-      return h(".map-wrap", null, drawMap(g));
+      return h(".map-wrap.map-tab", null, createMapView(g).el);
     case "style": {
       const look = s.look as PlayerLook;
       const wrap = h(".settings");

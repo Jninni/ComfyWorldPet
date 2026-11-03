@@ -91,6 +91,15 @@ Menus are fully navigable with the d-pad / stick (spatial focus), LB/RB switch t
 * **The Thornwild** (unlocked after the main story): light action combat against Gloomies with the Sparkle Wand,
   5 hearts, campfire checkpoints, trapped guardians to free, and the Gloom King boss — jump his shockwaves! Defeating
   him cleanses the forest and reveals the shy Moonbeam Unicorn.
+* **Fishing** with Marina at Sparkle Pond: cast at the rippling spots, tap when the bobber dips, then hold to keep the
+  net on the fish. 9 catches (incl. the legendary Golden Koi, an old boot and a treasure bottle), a Fish Log, Fishy Pie.
+* **Pet stat cards**: tap a party portrait, pick a friend in Bag → Party, or play with one in Critter Haven. Shows
+  class, perk bonus, level & XP, friendship and stats; pet them, feed treats, rename, swap party, ride.
+  Critters level up (1–10) by adventuring with you; levels strengthen their perks.
+* **Mini-map + full map**: live mini-map (rotates with the camera) showing you, quest goals, villagers with news,
+  fishing spots and double-jump treasures; tap it for a full map you can pinch/scroll-zoom and drag.
+* **Double-jump ledges**: four tall mesas with treasure (Sunny Mesa, Mossy Tower, Heron Rock, Lookout Stump) that a
+  normal jump can't reach — use Chirpy's double jump, the unicorn, or the giant frog's hops.
 * Autosave (localStorage) + nap in your bed to save. Saves from older versions upgrade automatically.
 
 ## Code map

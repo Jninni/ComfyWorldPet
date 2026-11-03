@@ -10,6 +10,15 @@ export class CollisionWorld {
   /** extra blocking test (e.g. deep water) */
   blockers: ((x: number, z: number) => boolean)[] = [];
   bounds = { minX: -1e9, maxX: 1e9, minZ: -1e9, maxZ: 1e9 };
+  /** raised ledges: solid walls unless your feet are already at (or above) the top */
+  ledges: { x: number; z: number; r: number; top: number }[] = [];
+
+  /** height of the ledge you're standing over (highest one), or null */
+  ledgeTop(x: number, z: number): number | null {
+    let t: number | null = null;
+    for (const l of this.ledges) if (Math.hypot(x - l.x, z - l.z) < l.r && (t === null || l.top > t)) t = l.top;
+    return t;
+  }
 
   constructor(private cell = 6) {}
 
@@ -74,10 +83,26 @@ export class CollisionWorld {
   private tmp = new Set<Collider>();
 
   /** Move a circle from (x,z) by (dx,dz), sliding along obstacles. */
-  move(x: number, z: number, dx: number, dz: number, r: number): { x: number; z: number; hit: boolean } {
+  move(x: number, z: number, dx: number, dz: number, r: number, feetY?: number): { x: number; z: number; hit: boolean } {
     let nx = x + dx,
       nz = z + dz;
     let hit = false;
+    // ledges are walls for anyone whose feet are below the top (critters always)
+    for (const l of this.ledges) {
+      if (feetY !== undefined && feetY >= l.top - 0.05) continue;
+      const inside = Math.hypot(x - l.x, z - l.z) < l.r;
+      if (inside) continue; // already up there (standing on a lower step of a stack)
+      const ddx = nx - l.x,
+        ddz = nz - l.z;
+      const d = Math.hypot(ddx, ddz);
+      const min = l.r + (feetY === undefined ? r : r * 0.4);
+      if (d < min) {
+        const k = d > 1e-5 ? (min - d) / d : 1;
+        nx += ddx * k;
+        nz += ddz * k;
+        hit = true;
+      }
+    }
     // blockers: try axis-separated slide
     if (this.blockers.length && this.isBlocked(nx, nz)) {
       hit = true;
