@@ -227,6 +227,8 @@ export class Game {
     this.life.initCrumbs();
     this.combat = new Combat(this);
     this.combat.onBossDefeated = () => this.onBossDefeated();
+    // tuckered out mid-boss-fight: reopen the arena so you can walk back in and try again
+    this.combat.onKnockedOut = () => this.setBossGate(false);
     this.initThornGate();
     progress(1, "Ready!");
     this.stage.engine.runRenderLoop(() => this.frame());
@@ -507,8 +509,7 @@ export class Game {
     if (L.def?.cleanse) L.def.cleanse(cleansed ? 1 : 0);
     if (L.def?.dangerous) {
       this.combat.begin(L);
-      this.bossStarted = false;
-      (L.def as ThornwildDef).setBossGate?.(false);
+      this.setBossGate(false);
     } else if (this.combat?.active) this.combat.end();
     let p: Vector3;
     let rot: number;
@@ -1221,6 +1222,19 @@ export class Game {
     }
   }
 
+  /** seal / open the boss arena (visuals + collision) */
+  setBossGate(closed: boolean) {
+    const L = this.locations.get("thornwild");
+    const def = L?.def as ThornwildDef | undefined;
+    if (!L || !def) return;
+    def.setBossGate?.(closed);
+    if (def.bossGate) {
+      L.collision.remove(def.bossGate);
+      if (closed) L.collision.add(def.bossGate);
+    }
+    this.bossStarted = closed;
+  }
+
   /** bonk gloom bubbles near a point (called by the wand swing) */
   bonkBubbles(at: Vector3) {
     for (const b of this.bubbles) {
@@ -1265,10 +1279,9 @@ export class Game {
       }
     }
     // walking into the boss arena starts the fight (once all guardians are freed, the King gets nervous)
-    const boss = def.spots.boss;
-    if (!this.bossStarted && boss && !this.state.flags.thornwildCleansed && Vector3.Distance(boss, pp) < 10) {
-      this.bossStarted = true;
-      def.setBossGate?.(true);
+    const arena = def.bossArena ?? (def.spots.boss ? { center: def.spots.boss, radius: 11 } : null);
+    if (!this.bossStarted && arena && !this.state.flags.thornwildCleansed && Math.hypot(arena.center.x - pp.x, arena.center.z - pp.z) < arena.radius - 1.5) {
+      this.setBossGate(true);
       this.combat.startBoss();
     }
     void dt;
@@ -1278,7 +1291,7 @@ export class Game {
     const L = this.current;
     const def = L.def as ThornwildDef;
     this.state.flags.thornwildCleansed = true;
-    def.setBossGate?.(false);
+    this.setBossGate(false);
     this.player.celebrate = 2;
     audio.jingle("victory");
     // cleanse the whole area over a few seconds

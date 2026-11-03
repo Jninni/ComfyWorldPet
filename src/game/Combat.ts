@@ -1,6 +1,6 @@
 import { Vector3, type Mesh, TransformNode } from "@babylonjs/core";
 import type { Game, Location } from "./Game";
-import { buildEnemy, ENEMY_INFO, type EnemyKind, type EnemyModel } from "../entities/enemyModels";
+import { buildEnemy, buildHappyBlob, ENEMY_INFO, type EnemyKind, type EnemyModel } from "../entities/enemyModels";
 import { Batch, ball, torus, blob } from "../render/Shapes";
 import { SPECIES } from "../data/species";
 import type { Follower } from "./Actors";
@@ -70,6 +70,9 @@ export class Combat {
   private slashT = 0;
   onBossDefeated: (() => void) | null = null;
   onEnemyDefeated: ((kind: EnemyKind, pos: Vector3) => void) | null = null;
+  onKnockedOut: (() => void) | null = null;
+  /** the Gloom King, happy again, bouncing around after the fight */
+  private happy: { m: EnemyModel; t: number; pos: Vector3 } | null = null;
 
   constructor(private g: Game) {
     this.heartsEl = h(".hearts-hud");
@@ -107,6 +110,8 @@ export class Combat {
     for (const w of this.waves) w.mesh.dispose();
     this.waves = [];
     this.boss = null;
+    this.happy?.m.dispose();
+    this.happy = null;
     this.active = false;
     this.invuln = 0;
     this.g.player?.model.root.setEnabled(true);
@@ -261,6 +266,15 @@ export class Combat {
     this.g.fx.puff(at, 8, "#cdb9f0");
     setTimeout(() => e.model.setEnabled(false), 500);
     if (e === this.boss) {
+      const at2 = e.pos.clone();
+      setTimeout(() => {
+        if (!this.active) return;
+        const m = buildHappyBlob(this.g.scene);
+        m.root.position.copyFrom(at2);
+        m.root.scaling.setAll(1.8);
+        this.happy = { m, t: 0, pos: at2 };
+        this.g.fx.hearts(at2.add(new Vector3(0, 1.5, 0)), 20);
+      }, 450);
       this.bossEl.style.display = "none";
       this.invuln = 0;
       this.g.player.model.root.setEnabled(true);
@@ -317,6 +331,7 @@ export class Combat {
     g.followers.forEach((f, i) => f.place(p.add(new Vector3(-0.8 - i * 0.8, 0, -1)), 0));
     this.hearts = this.maxHearts;
     this.invuln = 2;
+    this.onKnockedOut?.();
     // Gloomies go home and feel better too
     for (const e of this.enemies) {
       if (e.state === "dead") continue;
@@ -365,6 +380,13 @@ export class Combat {
       this.shieldMesh.scaling.setAll(1 + Math.sin(performance.now() / 200) * 0.04);
     }
     if (playing && (input.pressed("x") || input.pressed("attack"))) this.swing();
+    if (this.happy) {
+      const hb = this.happy;
+      hb.t += dt;
+      if (hb.t % 1.4 < dt) hb.m.attack();
+      hb.m.root.rotation.y = Math.atan2(p.pos.x - hb.pos.x, p.pos.z - hb.pos.z);
+      hb.m.update(dt, { speed: 0 });
+    }
     this.updateEnemies(dt, playing);
     this.updateGuardians(dt);
     this.updateShots(dt);
