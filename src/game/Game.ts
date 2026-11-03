@@ -1392,6 +1392,13 @@ export class Game {
     root.rotation.y = p.rot;
     root.scaling.setAll(r.scale);
     if (dt > 0) r.f.model.update(dt, { speed: Math.min(1, p.moveSpeed / 7) });
+    // sit on the mount's saddle so the rider bobs along with the trot/gallop/hops
+    const seat = r.f.model.seat;
+    if (seat) {
+      root.computeWorldMatrix(true);
+      seat.computeWorldMatrix(true);
+      p.model.root.position.copyFrom(seat.getAbsolutePosition());
+    }
     // unicorn rainbow sparkle trail
     if (r.f.owned.species === "unicorn" && p.moveSpeed > 2) {
       this.trailT -= dt;

@@ -5,7 +5,7 @@
  * play field and on the result card.
  */
 import type { SpeciesId } from "../data/species";
-import { C, INK, darken, drawHeart, drawNote, drawTwinkle, lighten, mix, normHex, rgba, shine, silhouette, ink, starPath } from "./draw";
+import { C, INK, darken, drawHeart, drawNote, drawStar, drawTwinkle, lighten, mix, normHex, rgba, shine, silhouette, ink, starPath } from "./draw";
 
 export type Mood = "idle" | "happy" | "love" | "surprised" | "sad" | "nom" | "sing" | "wow";
 
@@ -315,6 +315,119 @@ export class Critter {
       g.restore();
     }
 
+    // new species: pony & unicorn (fluffy mane/tail), emberling (wings + heart tail),
+    // roarlet (huge mane + tufted tail), shellby (shield-shaped shell + knight helmet)
+    const eq = sp === "pony" || sp === "unicorn";
+    const uni = sp === "unicorn";
+    const ember = sp === "emberling";
+    const lion = sp === "roarlet";
+    const shell = sp === "shellby";
+    const maneCols = uni ? ["#ffb3cf", "#ffd2a6", "#fff0a6", "#bdeed2", "#b6dcff", "#d4c0ff"] : ["#ffb7d0", "#d2bdf7", "#ffc6d8", "#c3aef0"];
+    const puff = (x: number, y: number, r: number, col: string) => {
+      g.beginPath();
+      g.ellipse(x, y, r, r * 0.92, 0, 0, Math.PI * 2);
+      ink(g, col, lw * 2);
+    };
+    const swish = (k: number) => Math.sin(t * 2.3) * 0.14 + (happyish ? Math.sin(t * 10) * 0.12 * k : 0);
+    if (eq) {
+      // big fluffy tail swishing out at the side
+      g.save();
+      g.translate(S * 0.72, S * 0.45);
+      g.rotate(-0.3 + swish(1));
+      for (let i = 0; i < 5; i++) puff(S * (0.12 + i * 0.15), -S * (0.02 + i * 0.13) + Math.sin(i * 1.3) * S * 0.03, S * (0.19 + 0.025 * i), maneCols[(i + 1) % maneCols.length]);
+      g.restore();
+      // mane cascading down one side of the head
+      const mw = Math.sin(t * 2.6) * S * 0.02;
+      [
+        [-0.72, -0.62, 0.22],
+        [-0.88, -0.36, 0.21],
+        [-0.96, -0.08, 0.19],
+        [-0.95, 0.18, 0.16],
+      ].forEach(([mx, my, mr], i) => puff(mx * S + mw * i * 0.5, my * S, mr * S, maneCols[(i + 3) % maneCols.length]));
+    }
+    if (ember) {
+      // fat tail with a little heart on the end
+      g.save();
+      g.translate(S * 0.7, S * 0.55);
+      g.rotate(-0.2 + swish(1));
+      g.beginPath();
+      g.moveTo(-S * 0.1, S * 0.12);
+      g.quadraticCurveTo(S * 0.55, S * 0.2, S * 0.62, -S * 0.3);
+      g.lineCap = "round";
+      g.strokeStyle = INK;
+      g.lineWidth = S * 0.2 + lw * 2;
+      g.stroke();
+      g.strokeStyle = this.body;
+      g.lineWidth = S * 0.2;
+      g.stroke();
+      drawHeart(g, S * 0.64, -S * 0.5, S * 0.36, C.rose, lw * 0.5);
+      g.restore();
+      // tiny rounded wings that flutter
+      const flap = Math.sin(t * (happyish ? 16 : 4)) * (happyish ? 0.3 : 0.12);
+      for (const s of [-1, 1]) {
+        g.save();
+        g.translate(s * S * 0.78, S * 0.12);
+        g.rotate(s * (0.15 + flap));
+        g.beginPath();
+        g.moveTo(0, S * 0.1);
+        g.quadraticCurveTo(s * S * 0.1, -S * 0.55, s * S * 0.62, -S * 0.42);
+        g.quadraticCurveTo(s * S * 0.6, -S * 0.2, s * S * 0.48, -S * 0.12);
+        g.quadraticCurveTo(s * S * 0.5, S * 0.05, s * S * 0.32, S * 0.06);
+        g.quadraticCurveTo(s * S * 0.28, S * 0.22, 0, S * 0.18);
+        g.closePath();
+        ink(g, mix(this.body, C.rose, 0.35), lw * 2);
+        g.restore();
+      }
+    }
+    if (lion) {
+      // tufted tail
+      g.save();
+      g.translate(S * 0.72, S * 0.55);
+      g.rotate(-0.25 + swish(1));
+      g.beginPath();
+      g.moveTo(0, 0);
+      g.quadraticCurveTo(S * 0.55, S * 0.05, S * 0.5, -S * 0.5);
+      g.lineCap = "round";
+      g.strokeStyle = INK;
+      g.lineWidth = S * 0.09 + lw * 2;
+      g.stroke();
+      g.strokeStyle = this.body;
+      g.lineWidth = S * 0.09;
+      g.stroke();
+      puff(S * 0.5, -S * 0.6, S * 0.17, darken(mix(this.body, C.orange, 0.7), 0.08));
+      g.restore();
+      // HUGE fluffy mane ringing the face
+      const N = 13;
+      const wob = happyish ? Math.sin(t * 12) * 0.03 : Math.sin(t * 2) * 0.015;
+      for (let i = 0; i < N; i++) {
+        const a = (i / N) * Math.PI * 2 - Math.PI / 2;
+        const r = S * (1.02 + wob * Math.sin(i * 2.1 + t * 3));
+        puff(Math.cos(a) * r, Math.sin(a) * r * 0.94 - S * 0.02, S * 0.34, i % 2 ? mix(this.body, C.orange, 0.75) : darken(mix(this.body, C.orange, 0.85), 0.07));
+      }
+    }
+    if (shell) {
+      // the shield-shaped shell behind: broad top, pointed bottom, light rim
+      const shield = (k: number) => {
+        g.beginPath();
+        g.moveTo(-S * 1.2 * k, -S * 0.5 * k);
+        g.quadraticCurveTo(-S * 1.22 * k, -S * 0.95 * k, -S * 0.85 * k, -S * 0.95 * k);
+        g.lineTo(S * 0.85 * k, -S * 0.95 * k);
+        g.quadraticCurveTo(S * 1.22 * k, -S * 0.95 * k, S * 1.2 * k, -S * 0.5 * k);
+        g.bezierCurveTo(S * 1.18 * k, S * 0.45 * k, S * 0.5 * k, S * 0.95 * k, 0, S * 1.12 * k);
+        g.bezierCurveTo(-S * 0.5 * k, S * 0.95 * k, -S * 1.18 * k, S * 0.45 * k, -S * 1.2 * k, -S * 0.5 * k);
+        g.closePath();
+      };
+      g.save();
+      g.translate(0, S * 0.1);
+      g.scale(1.08, 1);
+      shield(1);
+      ink(g, "#eaf7d6", lw * 2);
+      shield(0.86);
+      g.fillStyle = "#83cba2";
+      g.fill();
+      g.restore();
+    }
+
     if (sp === "puffbun") {
       for (const s of [-1, 1]) {
         const flop = s === 1 ? 0.25 + Math.sin(t * 2) * 0.08 : 0;
@@ -334,10 +447,10 @@ export class Critter {
           g.restore();
         });
       }
-    } else if (sp === "fennix" || sp === "mochi" || sp === "glowbat") {
-      const big = sp === "fennix" ? 1.15 : sp === "glowbat" ? 1.05 : 0.8;
+    } else if (sp === "fennix" || sp === "mochi" || sp === "glowbat" || eq) {
+      const big = sp === "fennix" ? 1.15 : sp === "glowbat" ? 1.05 : eq ? 0.85 : 0.8;
       for (const s of [-1, 1]) {
-        const a = s * (0.35 + earWiggle);
+        const a = s * ((eq ? 0.42 : 0.35) + earWiggle);
         const tri = (k: number, inset: number) => () => {
           g.save();
           g.translate(s * S * 0.5, -S * 0.55);
@@ -394,6 +507,11 @@ export class Critter {
           g.lineTo(s * S * 0.85, S * 0.35);
           g.closePath();
         });
+    } else if (lion) {
+      for (const s of [-1, 1]) {
+        back.push(() => g.ellipse(s * S * 0.56, -S * 0.66, S * 0.2, S * 0.19, 0, 0, Math.PI * 2));
+        innerEars.push(() => g.ellipse(s * S * 0.56, -S * 0.64, S * 0.1, S * 0.095, 0, 0, Math.PI * 2));
+      }
     } else if (sp === "ribbit") {
       for (const s of [-1, 1]) back.push(() => g.ellipse(s * S * 0.42, -S * 0.68, S * 0.3, S * 0.27, 0, 0, Math.PI * 2));
     } else if (sp === "chirpy") {
@@ -419,6 +537,7 @@ export class Critter {
     // feet behind body edge
     const feet = [-1, 1].map((s) => () => g.ellipse(s * S * 0.42, S * 0.84, S * 0.26, S * 0.16, 0, 0, Math.PI * 2));
     const innerC = sp === "glowbat" ? lighten(this.dark, 0.35) : sp === "fennix" ? C.cream : rp ? this.body : C.pink;
+    const hoof = eq ? (uni ? "#ffe7a8" : darken(mix(this.body, C.choco, 0.45), 0.08)) : "";
 
     /* ---------- body ---------- */
     if (sp === "ribbit") {
@@ -435,8 +554,8 @@ export class Critter {
         }
       }
       silhouette(g, [body, ...feet], this.body, lw);
-      if (rp) {
-        g.fillStyle = rpDark;
+      if (rp || eq) {
+        g.fillStyle = rp ? rpDark : hoof;
         for (const f of feet) {
           g.beginPath();
           f();
@@ -458,8 +577,20 @@ export class Critter {
     // belly patch
     g.beginPath();
     g.ellipse(0, S * 0.55, S * 0.58, S * 0.42, 0, 0, Math.PI * 2);
-    g.fillStyle = sp === "hoglet" || sp === "fennix" ? C.cream : rp ? rpDark : this.light;
+    g.fillStyle = sp === "hoglet" || sp === "fennix" || ember || lion ? C.cream : shell ? "#f6f1c9" : rp ? rpDark : this.light;
     g.fill();
+    if (ember) {
+      // belly stripes
+      g.strokeStyle = rgba(darken(C.cream, 0.25), 0.9);
+      g.lineWidth = lw * 0.6;
+      for (const k of [0.38, 0.55, 0.72]) {
+        g.beginPath();
+        g.moveTo(-S * 0.4, S * k);
+        g.quadraticCurveTo(0, S * (k + 0.06), S * 0.4, S * k);
+        g.stroke();
+      }
+    }
+    if (shell) drawHeart(g, 0, S * 0.6, S * 0.34, C.rose, lw * 0.4);
     g.setLineDash([S * 0.07, S * 0.06]);
     g.strokeStyle = rgba(darken(this.body, 0.4), 0.45);
     g.lineWidth = lw * 0.55;
@@ -471,7 +602,7 @@ export class Critter {
     for (const s of [-1, 1]) {
       g.beginPath();
       g.ellipse(s * S * 0.42, S * 0.86, S * 0.13, S * 0.07, 0, 0, Math.PI * 2);
-      g.fillStyle = rgba(C.pinkDeep, 0.55);
+      g.fillStyle = eq ? rgba("#ffffff", uni ? 0.7 : 0.35) : rgba(C.pinkDeep, 0.55);
       g.fill();
     }
     shine(g, -S * 0.52, -S * 0.5, S * 0.17, S * 0.09, -0.8, 0.55);
@@ -489,8 +620,9 @@ export class Critter {
       g.ellipse(0, S * 0.13, S * 0.13, S * 0.2, 0, 0, Math.PI * 2);
       ink(g, rp ? rpDark : this.body, lw * 2);
       g.beginPath();
-      g.ellipse(0, S * 0.22, S * 0.065, S * 0.05, 0, 0, Math.PI * 2);
-      g.fillStyle = rgba(C.pinkDeep, 0.5);
+      if (eq) g.ellipse(0, S * 0.25, S * 0.12, S * 0.08, 0, 0, Math.PI * 2);
+      else g.ellipse(0, S * 0.22, S * 0.065, S * 0.05, 0, 0, Math.PI * 2);
+      g.fillStyle = eq ? hoof : rgba(C.pinkDeep, 0.5);
       g.fill();
       g.restore();
     }
@@ -534,15 +666,56 @@ export class Critter {
       g.restore();
     }
 
-    // blush
-    g.save();
-    g.fillStyle = rgba(C.rose, happyish ? 0.55 : 0.38);
-    for (const s of [-1, 1]) {
+    if (eq || ember || lion) {
+      // light muzzle / snout
+      g.save();
       g.beginPath();
-      g.ellipse(s * S * 0.6 + lx * 0.5, S * 0.18 + ly, S * 0.15, S * 0.09, 0, 0, Math.PI * 2);
+      body();
+      g.clip();
+      g.beginPath();
+      if (eq) g.ellipse(lx, S * 0.34 + ly, S * 0.46, S * 0.3, 0, 0, Math.PI * 2);
+      else if (ember) g.ellipse(lx, S * 0.27 + ly, S * 0.36, S * 0.23, 0, 0, Math.PI * 2);
+      else g.ellipse(lx, S * 0.25 + ly, S * 0.28, S * 0.2, 0, 0, Math.PI * 2);
+      g.fillStyle = eq ? lighten(this.body, 0.7) : C.cream;
       g.fill();
+      if (eq || ember) {
+        // nostrils
+        g.fillStyle = eq ? darken(this.body, uni ? 0.25 : 0.4) : darken(this.body, 0.35);
+        for (const s of [-1, 1]) {
+          g.beginPath();
+          g.ellipse(s * S * (eq ? 0.16 : 0.11) + lx, S * (eq ? 0.26 : 0.2) + ly, S * 0.045, S * 0.032, s * 0.4, 0, Math.PI * 2);
+          g.fill();
+        }
+      }
+      g.restore();
     }
-    g.restore();
+    if (ember) {
+      // warm glowing cheeks
+      for (const s of [-1, 1]) {
+        const cx = s * S * 0.62 + lx * 0.5,
+          cy = S * 0.16 + ly;
+        const gr = g.createRadialGradient(cx, cy, 0, cx, cy, S * 0.24);
+        const glow = 0.75 + Math.sin(t * 3) * 0.12 + (happyish ? 0.15 : 0);
+        gr.addColorStop(0, rgba("#ffd27a", glow));
+        gr.addColorStop(0.55, rgba("#ff9a6a", glow * 0.75));
+        gr.addColorStop(1, rgba("#ff9a6a", 0));
+        g.fillStyle = gr;
+        g.beginPath();
+        g.ellipse(cx, cy, S * 0.24, S * 0.17, 0, 0, Math.PI * 2);
+        g.fill();
+      }
+    } else {
+      // blush
+      g.save();
+      g.fillStyle = rgba(C.rose, happyish ? 0.55 : 0.38);
+      for (const s of [-1, 1]) {
+        g.beginPath();
+        g.ellipse(s * S * 0.6 + lx * 0.5, S * 0.18 + ly, S * 0.15, S * 0.09, 0, 0, Math.PI * 2);
+        g.fill();
+      }
+      g.restore();
+    }
+    if (uni) drawStar(g, -S * 0.64 + lx * 0.5, -S * 0.08 + ly, S * 0.09, "#ffd1e8", lw * 0.35);
 
     for (const s of [-1, 1]) this.drawEye(g, s * S * eyeX + lx, eyeY + (sp === "ribbit" ? this.lookY * S * 0.05 : ly), S * eyeSize, lw, s);
 
@@ -560,14 +733,14 @@ export class Critter {
         ink(g, C.pinkDeep, lw * 1.6);
         g.restore();
       } else {
-        if (sp !== "ribbit") {
+        if (sp !== "ribbit" && !eq && !ember) {
           // tiny nose
           g.beginPath();
-          g.ellipse(lx, my - S * 0.06, S * 0.05, S * 0.035, 0, 0, Math.PI * 2);
-          g.fillStyle = sp === "fennix" || sp === "mochi" || sp === "puffbun" ? C.rose : INK;
+          g.ellipse(lx, my - S * 0.06, S * (lion ? 0.07 : 0.05), S * (lion ? 0.045 : 0.035), 0, 0, Math.PI * 2);
+          g.fillStyle = sp === "fennix" || sp === "mochi" || sp === "puffbun" ? C.rose : lion ? mix(C.rose, C.choco, 0.35) : INK;
           g.fill();
         }
-        this.drawMouth(g, lx, my + (sp === "ribbit" ? -S * 0.02 : 0), S, lw, sp === "ribbit");
+        this.drawMouth(g, lx, my + (sp === "ribbit" ? -S * 0.02 : eq ? S * 0.17 : ember ? S * 0.11 : lion ? S * 0.02 : 0), S, lw, sp === "ribbit");
       }
     }
     if (sp === "mochi") {
@@ -582,6 +755,13 @@ export class Critter {
           g.stroke();
         }
     }
+    if (ember) {
+      g.beginPath();
+      g.moveTo(lx + S * 0.06, my + S * 0.14);
+      g.lineTo(lx + S * 0.1, my + S * 0.23);
+      g.lineTo(lx + S * 0.14, my + S * 0.13);
+      ink(g, "#fff", lw * 0.8);
+    }
     if (sp === "glowbat") {
       g.beginPath();
       g.moveTo(lx + S * 0.07, my + S * 0.04);
@@ -591,6 +771,100 @@ export class Critter {
     }
 
     /* ---------- front accessories ---------- */
+    if (eq) {
+      // fluffy forelock between the ears (+ the unicorn's glowing spiral horn)
+      if (uni) {
+        g.save();
+        g.translate(0, -S * 0.78);
+        g.rotate(Math.sin(t * 1.6) * 0.03);
+        const gr = g.createRadialGradient(0, -S * 0.35, 0, 0, -S * 0.35, S * 0.6);
+        gr.addColorStop(0, rgba("#fff6c8", 0.55 + Math.sin(t * 3) * 0.15));
+        gr.addColorStop(1, rgba("#fff6c8", 0));
+        g.fillStyle = gr;
+        g.beginPath();
+        g.arc(0, -S * 0.35, S * 0.6, 0, Math.PI * 2);
+        g.fill();
+        g.beginPath();
+        g.moveTo(-S * 0.14, 0);
+        g.quadraticCurveTo(-S * 0.05, -S * 0.45, 0, -S * 0.66);
+        g.quadraticCurveTo(S * 0.05, -S * 0.45, S * 0.14, 0);
+        g.closePath();
+        ink(g, "#ffe9a8", lw * 2);
+        g.save();
+        g.clip();
+        g.strokeStyle = "#f5c86a";
+        g.lineWidth = lw * 0.8;
+        for (let i = 0; i < 4; i++) {
+          const y = -S * (0.08 + i * 0.14);
+          g.beginPath();
+          g.moveTo(-S * 0.16, y + S * 0.05);
+          g.lineTo(S * 0.16, y - S * 0.05);
+          g.stroke();
+        }
+        g.restore();
+        shine(g, -S * 0.04, -S * 0.3, S * 0.025, S * 0.1, 0.1, 0.7);
+        g.restore();
+      }
+      const fl: [number, number, number][] = [
+        [-0.3, -0.8, 0.2],
+        [0.3, -0.8, 0.2],
+        [-0.12, -0.86, 0.22],
+        [0.12, -0.86, 0.22],
+        [0, -0.78, 0.2],
+      ];
+      fl.forEach(([fx, fy, fr], i) => puff(fx * S, fy * S + Math.sin(t * 2 + i) * S * 0.01, fr * S, maneCols[(i * 2) % maneCols.length]));
+      if (uni && Math.sin(t * 2.1) > 0.6) drawTwinkle(g, S * 0.55, -S * 1.25, S * 0.1 * (Math.sin(t * 2.1) - 0.6) * 2.5, "#fff");
+    }
+    if (ember) {
+      // soft horn nubs
+      for (const s of [-1, 1]) {
+        g.save();
+        g.translate(s * S * 0.34, -S * 0.78);
+        g.rotate(s * 0.25);
+        g.beginPath();
+        g.moveTo(-S * 0.11, S * 0.06);
+        g.quadraticCurveTo(-S * 0.06, -S * 0.22, 0, -S * 0.26);
+        g.quadraticCurveTo(S * 0.06, -S * 0.22, S * 0.11, S * 0.06);
+        g.closePath();
+        ink(g, "#fff3d6", lw * 2);
+        g.restore();
+      }
+    }
+    if (shell) {
+      // tiny knight helmet with a pink plume
+      const bob = Math.sin(t * 3) * 0.05 + (happyish ? Math.sin(t * 12) * 0.12 : 0);
+      g.save();
+      g.translate(0, -S * 0.98);
+      g.rotate(bob);
+      puff(-S * 0.14, -S * 0.16, S * 0.13, "#ff9fbf");
+      puff(S * 0.02, -S * 0.22, S * 0.15, "#ffc8da");
+      puff(S * 0.18, -S * 0.12, S * 0.12, "#ff9fbf");
+      g.restore();
+      g.save();
+      g.beginPath();
+      g.moveTo(-S * 0.98, -S * 0.3);
+      g.bezierCurveTo(-S * 1.0, -S * 1.02, S * 1.0, -S * 1.02, S * 0.98, -S * 0.3);
+      g.quadraticCurveTo(0, -S * 0.42, -S * 0.98, -S * 0.3);
+      g.closePath();
+      ink(g, "#e4e7f6", lw * 2);
+      g.beginPath();
+      g.moveTo(-S * 0.98, -S * 0.3);
+      g.quadraticCurveTo(0, -S * 0.42, S * 0.98, -S * 0.3);
+      g.strokeStyle = "#c2c7e2";
+      g.lineWidth = S * 0.08;
+      g.stroke();
+      g.strokeStyle = "#cfd3ec";
+      g.lineWidth = S * 0.07;
+      g.beginPath();
+      g.moveTo(0, -S * 0.42);
+      g.lineTo(0, -S * 0.88);
+      g.stroke();
+      g.restore();
+      g.beginPath();
+      g.arc(0, -S * 0.42, S * 0.07, 0, Math.PI * 2);
+      ink(g, C.sun, lw);
+      shine(g, -S * 0.5, -S * 0.72, S * 0.15, S * 0.06, -0.5, 0.6);
+    }
     if (sp === "shroomy") {
       const capC = mix(this.body, C.rose, 0.55);
       g.save();

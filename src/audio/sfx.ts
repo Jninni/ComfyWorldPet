@@ -392,6 +392,12 @@ interface VoiceDef {
   am?: number;
   rev?: number;
   gain?: number;
+  /** breathy "puff" noise burst before the first syllable (level) */
+  puff?: number;
+  /** tiny ember crackles sprinkled over the call (level) */
+  crackle?: number;
+  /** sparkly bell arpeggio layered on top (velocity) */
+  chime?: number;
 }
 const VOICES: Record<string, VoiceDef> = {
   puffbun: { f: 1150, wave: "sine", syl: [{ p: 1, d: 0.07, g: 0.05 }, { p: 1.12, d: 0.09, g: 0 }], glide: 1.15, breath: 0.04, gain: 1.1 },
@@ -406,6 +412,16 @@ const VOICES: Record<string, VoiceDef> = {
   // red panda: a breathy little "huff" then squeaky twittering chirps (the huff-quack)
   redpanda: { f: 1250, wave: "triangle", syl: [{ p: 0.78, d: 0.05, g: 0.035 }, { p: 1.12, d: 0.045, g: 0.025 }, { p: 1.28, d: 0.07, g: 0 }], glide: 1.16, trill: [28, 70], breath: 0.1, lp: 3600, formant: 1800, gain: 0.85 },
   mochi: { f: 700, wave: "reed", syl: [{ p: 1, d: 0.2, g: 0 }], glide: 1.35, lp: 2200, formant: 1300, trill: [6, 25] },
+  // pony: a soft wobbly whinny falling into a little "hu-hu-hu" nicker
+  pony: { f: 640, wave: "reed", syl: [{ p: 1.3, d: 0.2, g: 0.035 }, { p: 0.86, d: 0.05, g: 0.028 }, { p: 0.83, d: 0.05, g: 0.028 }, { p: 0.8, d: 0.06, g: 0 }], glide: 0.82, trill: [11, 85], lp: 2400, formant: 1200, breath: 0.06, gain: 0.85 },
+  // unicorn: a lighter, airier whinny wrapped in a twinkly bell arpeggio
+  unicorn: { f: 880, wave: "triangle", syl: [{ p: 1.25, d: 0.18, g: 0.03 }, { p: 0.95, d: 0.05, g: 0.025 }, { p: 0.9, d: 0.065, g: 0 }], glide: 0.85, trill: [10, 70], lp: 3600, breath: 0.03, rev: 0.4, chime: 0.55, gain: 0.85 },
+  // emberling: a squeaky little puff of smoke with ember crackles
+  emberling: { f: 1350, wave: "triangle", syl: [{ p: 1, d: 0.07, g: 0.04 }, { p: 1.22, d: 0.1, g: 0 }], glide: 1.25, lp: 3800, formant: 2000, puff: 0.09, crackle: 0.045, gain: 0.85 },
+  // roarlet: a tiny, brave, squeaky "rrrawr" (rolling AM on the r)
+  roarlet: { f: 600, wave: "reed", syl: [{ p: 1.08, d: 0.07, g: 0 }, { p: 1, d: 0.17, g: 0 }], glide: 0.8, am: 36, trill: [7, 40], lp: 2800, formant: 1400, breath: 0.05, gain: 1.2 },
+  // shellby: a slow, gentle hum that ends in a soft "boop"
+  shellby: { f: 270, wave: "sine", syl: [{ p: 1, d: 0.26, g: 0.08 }, { p: 1.26, d: 0.12, g: 0 }], glide: 1.03, trill: [4.5, 18], lp: 1300, rev: 0.25, gain: 0.95 },
   generic: { f: 900, wave: "triangle", syl: [{ p: 1, d: 0.08, g: 0.05 }, { p: 1.12, d: 0.1, g: 0 }], glide: 1.2, lp: 3000 },
 };
 export const VOICE_SPECIES = Object.keys(VOICES).filter((k) => k !== "generic");
@@ -417,6 +433,19 @@ export function playVoice(o: SfxOut, species: string, mood: "happy" | "curious" 
   const base = def.f * rr(0.94, 1.06) * (mood === "sad" ? 0.86 : 1);
   const slow = mood === "sad" ? 1.35 : 1;
   let tt = t;
+  if (def.puff) {
+    noise(ch, t, { type: "bandpass", f: 2400, f2: 700, glide: 0.09, q: 0.9, a: 0.01, d: 0.1, peak: def.puff });
+    tt += 0.06;
+  }
+  if (def.crackle) {
+    for (let i = 0; i < 7; i++) noise(ch, t + 0.03 + R() * 0.32, { type: "highpass", f: 2500 + R() * 3500, a: 0.001, d: 0.008 + R() * 0.012, peak: def.crackle * rr(0.6, 1.3) });
+  }
+  if (def.chime) {
+    const up = mood === "sad" ? [12, 7, 4, 0] : mood === "curious" ? [0, 7, 4, 12] : [0, 4, 7, 12];
+    const m0 = 86 + (mood === "sad" ? -3 : 0);
+    up.forEach((n, i) => INSTS.bell(ch, t + 0.04 + i * 0.055 * slow, m0 + n, 0.3, def.chime! * (1 - i * 0.12)));
+    noise(ch, t, { type: "highpass", f: 7500, a: 0.04, d: 0.35, peak: 0.02 * def.chime });
+  }
   def.syl.forEach((s, i) => {
     const last = i === def.syl.length - 1;
     const d = s.d * slow;

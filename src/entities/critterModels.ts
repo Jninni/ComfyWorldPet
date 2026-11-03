@@ -1753,6 +1753,8 @@ function buildEquine(c: Ctx, uni: boolean): Critter {
       // horn base ring
       hs.push(blobM(s, [0.06, 0.024, 0.06], [0, 1.272, 0.53], P.hornB, [0.45, 0, 0], undefined, 8));
     }
+    // ears ride on the head mesh (keeps the rider within the usual draw-call budget)
+    for (const sd of [-1, 1]) hs.push(...coneEar(c, sd, [sd * 0.11, 1.24, 0.4], 0.15, 0.062, 0.36, 0.18, P.coat, P.inner, undefined, 0.6, 0.22));
     if (R && !uni) hs.push(...flower(c, [0.15, 1.27, 0.44], [0.6, 0.7, 0.3], "#ffffff", "#ffd85a", 1.15));
     if (R && uni) hs.push(...bow(c, [-0.14, 1.27, 0.38], "#b7a2f2", [0, -0.3, 0.4], 1.1));
     return hs;
@@ -1773,13 +1775,6 @@ function buildEquine(c: Ctx, uni: boolean): Critter {
     const hn: V3 = [0, 1.27, 0.53];
     const horn = spiralHorn(s, 0.28, 0.054, hn, [0.42, 0, 0], P.horn, P.hornB, 2.8);
     k.part("horn", head, hn, [horn], { outline: 0.01, material: toonMat(s, { name: "unicornHorn" + (R ? "R" : ""), emissive: P.hornE, rim: 0.2 }), shadow: true });
-  }
-  const ears: Ear[] = [];
-  for (const sd of [-1, 1]) {
-    const piv: V3 = [sd * 0.11, 1.24, 0.4];
-    const en = k.node("ear" + sd, head, piv);
-    k.part("earMesh" + sd, en, piv, coneEar(c, sd, piv, 0.15, 0.062, 0.36, 0.18, P.coat, P.inner, undefined, 0.6, 0.22));
-    ears.push(ear(en, sd, 0.45, 0.5, 0.45));
   }
 
   /* ---- tail: big fluffy puff-chain ---- */
@@ -1803,7 +1798,6 @@ function buildEquine(c: Ctx, uni: boolean): Critter {
   const rig: Partial<Rig> & { head: TransformNode; faces: Mesh[] } = {
     head,
     faces,
-    ears,
     tails,
     legs,
     seat,
@@ -2053,9 +2047,9 @@ function buildRoarlet(c: Ctx): Critter {
     }
     for (let i = 0; i < 9; i++) {
       const a = (i / 9) * TAU + 0.35;
-      hs.push(ballM(s, 0.1, [Math.cos(a) * 0.13, 0.465 + Math.sin(a) * 0.125, -0.02], i % 2 ? P.maneB : P.mane, undefined, 10));
+      hs.push(ballM(s, 0.1, [Math.cos(a) * 0.13, 0.465 + Math.sin(a) * 0.125, -0.02], i % 2 ? P.maneB : P.mane, undefined, 8));
     }
-    hs.push(ballM(s, 0.12, [0, 0.47, -0.05], P.maneB, undefined, 10));
+    hs.push(ballM(s, 0.12, [0, 0.47, -0.05], P.maneB, undefined, 8));
     // round ears peeking out of the mane
     for (const sd of [-1, 1]) {
       const ep = surf(HE, sd * 0.55, 0.85, 0.0);
