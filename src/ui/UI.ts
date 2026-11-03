@@ -161,7 +161,20 @@ export class UI {
       el.addEventListener("pointercancel", up);
       return el;
     };
-    return h(".touch-btns", null, mk("tbtn-a", "a", h("span", null, "✋", this.aLabel)), mk("tbtn-b", "b", h("span", null, "👟", h("small", null, "Run"))), mk("tbtn-x", "x", "🐾"));
+    this.rideBtn = mk("tbtn-ride", "ride", h("span", null, "🐴", h("small", null, "Ride")));
+    this.rideBtn.style.display = "none";
+    this.xIcon = h("span", null, "🐾");
+    return h(".touch-btns", null, mk("tbtn-a", "a", h("span", null, "✋", this.aLabel)), mk("tbtn-b", "b", h("span", null, "👟", h("small", null, "Run"))), mk("tbtn-x", "x", this.xIcon), this.rideBtn);
+  }
+
+  private rideBtn!: HTMLElement;
+  private xIcon!: HTMLElement;
+  setRideVisible(on: boolean) {
+    this.rideBtn.style.display = on ? "" : "none";
+  }
+  /** in dangerous areas the X button becomes the wand attack */
+  setCombatButtons(on: boolean) {
+    this.xIcon.textContent = on ? "⚔️" : "🐾";
   }
 
   setActionLabel(t: string) {

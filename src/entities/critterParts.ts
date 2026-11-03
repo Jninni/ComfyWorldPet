@@ -143,6 +143,175 @@ export function puffStar(scene: Scene, points: number, rOut: number, rIn: number
   return place(m, pos, rot);
 }
 
+/**
+ * Puffy extruded 2D outline facing +Z (thickness along Z), pillow-rounded: a centre point, an inner
+ * ring and the outer rim on each side. `pts` must be star-shaped about the origin.
+ */
+export function puffShape(scene: Scene, pts: [number, number][], thick: number, pos: V3, color: ColorLike, rot?: V3): Mesh {
+  const p: number[] = [0, 0, thick, 0, 0, -thick];
+  const ref: number[] = [0, 0, 1, 0, 0, -1];
+  const N = pts.length;
+  for (const [x, y] of pts) {
+    for (const sd of [1, -1]) {
+      p.push(x * 0.62, y * 0.62, sd * thick * 0.82);
+      ref.push(x * 0.4, y * 0.4, sd * 0.8);
+    }
+    for (const sd of [1, -1]) {
+      p.push(x, y, sd * thick * 0.28);
+      ref.push(x, y, sd * 0.3);
+    }
+  }
+  const idx: number[] = [];
+  // per point: 4 verts [innerF, innerB, outerF, outerB]
+  const v = (i: number, k: number) => 2 + (i % N) * 4 + k;
+  for (let i = 0; i < N; i++) {
+    const j = i + 1;
+    idx.push(0, v(i, 0), v(j, 0));
+    idx.push(1, v(j, 1), v(i, 1));
+    idx.push(v(i, 0), v(i, 2), v(j, 0), v(j, 0), v(i, 2), v(j, 2));
+    idx.push(v(i, 1), v(j, 1), v(i, 3), v(j, 1), v(j, 3), v(i, 3));
+    idx.push(v(i, 2), v(i, 3), v(j, 2), v(j, 2), v(i, 3), v(j, 3));
+  }
+  fixWinding(p, idx, ref);
+  const normals: number[] = [];
+  VertexData.ComputeNormals(p, idx, normals);
+  const vd = new VertexData();
+  vd.positions = p;
+  vd.indices = idx;
+  vd.normals = normals;
+  const m = new Mesh("puff", scene);
+  vd.applyToMesh(m);
+  prep(m, color);
+  return place(m, pos, rot);
+}
+
+/** Heart outline (size = half-width), centred so it is star-shaped about the origin. */
+export function heartPts(size: number, n = 28): [number, number][] {
+  const out: [number, number][] = [];
+  for (let i = 0; i < n; i++) {
+    const t = (i / n) * Math.PI * 2;
+    const x = 16 * Math.sin(t) ** 3;
+    const y = 13 * Math.cos(t) - 5 * Math.cos(2 * t) - 2 * Math.cos(3 * t) - Math.cos(4 * t);
+    out.push([(x / 16) * size, ((y + 2.5) / 16) * size]);
+  }
+  return out;
+}
+
+export function heartM(scene: Scene, size: number, thick: number, pos: V3, color: ColorLike, rot?: V3): Mesh {
+  return puffShape(scene, heartPts(size), thick, pos, color, rot);
+}
+
+/** Average normals of coincident vertices (sphere seams) so outlines never crack after a deform. */
+export function weldNormals(pos: ArrayLike<number>, nrm: number[]) {
+  const map = new Map<string, number[]>();
+  const n = pos.length / 3;
+  for (let i = 0; i < n; i++) {
+    const key = `${Math.round(pos[i * 3] * 1e4)},${Math.round(pos[i * 3 + 1] * 1e4)},${Math.round(pos[i * 3 + 2] * 1e4)}`;
+    const l = map.get(key);
+    if (l) l.push(i);
+    else map.set(key, [i]);
+  }
+  for (const l of map.values()) {
+    if (l.length < 2) continue;
+    let x = 0,
+      y = 0,
+      z = 0;
+    for (const i of l) {
+      x += nrm[i * 3];
+      y += nrm[i * 3 + 1];
+      z += nrm[i * 3 + 2];
+    }
+    const len = Math.hypot(x, y, z) || 1;
+    for (const i of l) {
+      nrm[i * 3] = x / len;
+      nrm[i * 3 + 1] = y / len;
+      nrm[i * 3 + 2] = z / len;
+    }
+  }
+}
+
+/**
+ * An ellipsoid reshaped like a heraldic "heater" shield seen from above: broad, squarish front (+Z),
+ * sides that taper to a soft point at the back, and a flattened underside. Used for the turtle's shell.
+ * `under` squashes the lower half (0..1).
+ */
+export function shieldDome(scene: Scene, r: V3, pos: V3, color: ColorLike, bottom?: ColorLike, taper = 0.5, under = 0.3, seg = 18): Mesh {
+  const m = MeshBuilder.CreateSphere("shield", { diameter: 2, segments: seg }, scene);
+  const p = m.getVerticesData(VertexBuffer.PositionKind)!;
+  const out = new Float32Array(p.length);
+  for (let i = 0; i < p.length; i += 3) {
+    let x = p[i],
+      y = p[i + 1],
+      z = p[i + 2];
+    if (z < 0) x *= 1 - taper * Math.pow(-z, 1.6);
+    else x *= 1 + 0.12 * z;
+    // squarer front edge
+    if (z > 0) z *= 1 - 0.18 * x * x;
+    if (y < 0) y *= under;
+    out[i] = x * r[0];
+    out[i + 1] = y * r[1];
+    out[i + 2] = z * r[2];
+  }
+  const idx = m.getIndices()!;
+  const nrm: number[] = [];
+  VertexData.ComputeNormals(out, idx, nrm);
+  weldNormals(out, nrm);
+  m.setVerticesData(VertexBuffer.PositionKind, out);
+  m.setVerticesData(VertexBuffer.NormalKind, nrm);
+  prep(m, color, bottom);
+  return place(m, pos);
+}
+
+/**
+ * Spiral unicorn horn along +Y (base at origin): a cone whose two-lobed cross-section twists as it rises,
+ * which reads as a spiral ridge. `turns` = number of twists.
+ */
+export function spiralHorn(scene: Scene, h: number, r: number, pos: V3, rot: V3, color: ColorLike, bottom?: ColorLike, turns = 2.5, rings = 20, seg = 12): Mesh {
+  const p: number[] = [];
+  const ref: number[] = [];
+  for (let i = 0; i < rings; i++) {
+    const v = i / rings;
+    const rr = r * Math.pow(1 - v, 0.8) * (i === 0 ? 0.96 : 1);
+    for (let j = 0; j < seg; j++) {
+      const th = (j / seg) * Math.PI * 2;
+      const mod = 1 + 0.2 * Math.cos(2 * th + turns * Math.PI * 2 * v) * Math.min(1, v * 6 + 0.3);
+      p.push(Math.cos(th) * rr * mod, v * h, Math.sin(th) * rr * mod);
+      ref.push(Math.cos(th), 0.25, Math.sin(th));
+    }
+  }
+  const tip = p.length / 3;
+  p.push(0, h, 0);
+  ref.push(0, 1, 0);
+  const bot = tip + 1;
+  p.push(0, 0, 0);
+  ref.push(0, -1, 0);
+  const idx: number[] = [];
+  for (let i = 0; i < rings - 1; i++)
+    for (let j = 0; j < seg; j++) {
+      const a = i * seg + j,
+        b = i * seg + ((j + 1) % seg),
+        c = a + seg,
+        d = b + seg;
+      idx.push(a, c, b, b, c, d);
+    }
+  const last = (rings - 1) * seg;
+  for (let j = 0; j < seg; j++) {
+    idx.push(last + j, tip, last + ((j + 1) % seg));
+    idx.push(j, (j + 1) % seg, bot);
+  }
+  fixWinding(p, idx, ref);
+  const normals: number[] = [];
+  VertexData.ComputeNormals(p, idx, normals);
+  const vd = new VertexData();
+  vd.positions = p;
+  vd.indices = idx;
+  vd.normals = normals;
+  const m = new Mesh("horn", scene);
+  vd.applyToMesh(m);
+  prep(m, color, bottom);
+  return place(m, pos, rot);
+}
+
 /** Round-capped tube through rig-space points (mouths, closed eyes, whiskers). */
 export function tubeM(scene: Scene, pts: V3[], radius: number, color: ColorLike, caps = true): Mesh[] {
   const path = pts.map((q) => new Vector3(q[0], q[1], q[2]));

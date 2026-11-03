@@ -1,5 +1,5 @@
 export type ResourceId = "twig" | "petal" | "pebble" | "berry" | "crystal";
-export type KeyItemId = "journal" | "charm" | "lantern" | "starCrystal" | "yarn" | "cookie";
+export type KeyItemId = "journal" | "charm" | "lantern" | "starCrystal" | "yarn" | "cookie" | "wand";
 
 export const RESOURCES: Record<ResourceId, { name: string; icon: string; color: string; desc: string }> = {
   twig: { name: "Twigs", icon: "🪵", color: "#c99a6b", desc: "Sturdy little sticks from the woods." },
@@ -14,6 +14,7 @@ export const KEY_ITEMS: Record<KeyItemId, { name: string; icon: string; desc: st
   charm: { name: "Friendship Charm", icon: "💖", desc: "Lets you befriend wild critters." },
   lantern: { name: "Star Lantern", icon: "🏮", desc: "Lights the way through dark caves." },
   starCrystal: { name: "Star Crystal", icon: "🌟", desc: "A legendary crystal that glows with friendship." },
+  wand: { name: "Sparkle Wand", icon: "🪄", desc: "Bonk Gloomies into sparkles! Ⓧ / F / ⚔️ in the Thornwild." },
   yarn: { name: "Yarn Balls", icon: "🧶", desc: "Stitch's lost yarn." },
   cookie: { name: "Critter Cookies", icon: "🍪", desc: "Makes befriending a little easier." },
 };

@@ -71,7 +71,6 @@ export class Life {
   /* ================================================================== */
 
   update(dt: number) {
-    this.g.player.speedMul = this.buffActive("zoomies") ? 1.35 : 1;
     this.buffTimer -= dt;
     if (this.buffTimer <= 0) {
       this.buffTimer = 0.5;
@@ -104,6 +103,7 @@ export class Life {
     this.g.fx.hearts(this.g.player.pos.add(new Vector3(0, 1.6, 0)), 8);
     this.g.player.celebrate = 1;
     this.g.ui.toast(`Yum! ${BUFFS[f.buff].name}${atCafe ? " (café bonus!)" : ""}`, BUFFS[f.buff].icon, "var(--butter)");
+    if (this.g.combat?.active) this.g.combat.heal(2);
     this.g.save();
   }
 
@@ -235,6 +235,13 @@ export class Life {
       bed.crop = unlocked[pick];
       bed.plantedAt = Date.now();
       bed.watered = false;
+      if (g.partyHas("shroomy")) {
+        // Shroomy waters the seeds right away and gives them a head start
+        const total = CROPS[bed.crop].growSec * 1000;
+        bed.plantedAt -= total * (g.bestFriendship("shroomy") >= 5 ? 0.65 : 0.55);
+        bed.watered = true;
+        g.ui.toast("Shroomy watered your seeds! 💧", "🍄", "var(--mint)");
+      }
       audio.sfx("pop");
       g.fx.puff(at, 10, "#c9a07a");
       g.story.onGarden("plant", bed.crop);

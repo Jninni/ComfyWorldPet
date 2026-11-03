@@ -1,5 +1,5 @@
 /**
- * critterModels — procedural plush critters (10 species × 2 colourways) with procedural animation.
+ * critterModels — procedural plush critters (16 species × 2 colourways) with procedural animation.
  *
  * Rig per critter:
  *   root (integrator moves/rotates)            ← CritterModel.root
@@ -15,7 +15,7 @@ import type { SpeciesId } from "../data/species";
 import { rng } from "../render/Palette";
 import { toonMat } from "../render/Toon";
 import { lathe, type V3 } from "../render/Shapes";
-import { Kit, ballM, blobM, softConeM, puffStar, capOn, decal, surf, arcOn, rotZTo, rotYTo, add, buildHeads, type Ell, type FaceSpec } from "./critterParts";
+import { Kit, ballM, blobM, softConeM, puffStar, capOn, decal, surf, arcOn, rotZTo, rotYTo, add, norm, heartM, shieldDome, spiralHorn, buildHeads, type Ell, type FaceSpec } from "./critterParts";
 
 export interface CritterAnimState {
   speed: number; // 0..1 normalized move speed
@@ -31,10 +31,19 @@ export interface CritterModel {
   emote(kind: "happy" | "surprised" | "love" | "sad"): void;
   setEnabled(on: boolean): void;
   dispose(): void;
+  /** riders only: height (local, at scale 1) where a rider sits, measured from the feet (seat is at x = z = 0) */
+  seatY?: number;
+  /**
+   * riders only: a node at the seat (0, seatY, 0) that follows the trot/gallop bob, pitch and hops
+   * (squash is cancelled out). Parent the rider to it, or read its world matrix, for a lively ride.
+   */
+  seat?: TransformNode;
+  /** guardians (and any critter): play a quick attack animation (~0.35–0.5 s); safe to call often */
+  attack?(): void;
 }
 
 type EmoteKind = "happy" | "surprised" | "love" | "sad";
-type Gait = "hop" | "bounce" | "trot" | "waddle" | "shuffle" | "hover";
+type Gait = "hop" | "bounce" | "trot" | "waddle" | "shuffle" | "hover" | "gallop";
 
 interface Cfg {
   gait: Gait;
@@ -58,6 +67,10 @@ interface Cfg {
   sleepHeadPitch: number;
   sleepHeadRoll: number;
   sleepHeadDrop: number;
+  /** height of the body-pitch pivot (0 = feet); big quadrupeds rock about their middle */
+  pitchPivot: number;
+  /** attack animation length (s) */
+  attackDur: number;
 }
 
 const DEF: Cfg = {
@@ -81,6 +94,8 @@ const DEF: Cfg = {
   sleepHeadPitch: 0.3,
   sleepHeadRoll: 0.25,
   sleepHeadDrop: 0.03,
+  pitchPivot: 0,
+  attackDur: 0.42,
 };
 
 interface Ear {
@@ -123,6 +138,26 @@ interface Leg {
   hopRx: number;
   /** stride scale */
   k: number;
+  /** gallop gait: phase at full gallop (blends from `ph` at a trot), swing (rad) and sleep fold (rad) */
+  ph2?: number;
+  swing?: number;
+  sleepRx?: number;
+}
+
+/** Pose offsets written by an attack animation each frame (reset to 0 before every call). */
+export interface AtkPose {
+  /** base offsets: forward, up, pitch (+ = nose down), roll, squash (+ = squash) */
+  z: number;
+  y: number;
+  pitch: number;
+  roll: number;
+  sq: number;
+  /** head offsets: pitch, forward, up */
+  hp: number;
+  hz: number;
+  hy: number;
+  /** face index to show (-1 = leave alone) */
+  face: number;
 }
 
 interface Rig {
@@ -137,6 +172,10 @@ interface Rig {
   sparkle?: TransformNode;
   sparklePos?: V3;
   hook?: (c: Critter, dt: number) => void;
+  /** custom attack pose (u = 0..1 through the attack); defaults to a small lunge */
+  attackPose?: (c: Critter, u: number, p: AtkPose) => void;
+  seat?: TransformNode;
+  seatY?: number;
   nodes: Record<string, TransformNode>;
 }
 
@@ -150,6 +189,31 @@ let seedCounter = 1;
 
 const FACE = { open: 0, closed: 1, happy: 2, sad: 3, surprised: 4 } as const;
 const EMOTE_DUR: Record<EmoteKind, number> = { happy: 0.95, surprised: 0.75, love: 1.05, sad: 1.25 };
+const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
+
+/** Default attack: a quick wind-up, a bouncy lunge forward and a settle (any species). */
+function genericAttack(cr: Critter, u: number, p: AtkPose) {
+  const H = cr.cfg.height;
+  if (u < 0.3) {
+    const a = sstep(0, 0.3, u);
+    p.z = -0.06 * H * a;
+    p.pitch = -0.12 * a;
+    p.sq = 0.1 * a;
+  } else if (u < 0.55) {
+    const a = sstep(0.3, 0.55, u);
+    p.z = lerp(-0.06, 0.18, a) * H;
+    p.y = 0.07 * H * Math.sin(Math.PI * a);
+    p.pitch = lerp(-0.12, 0.2, a);
+    p.sq = lerp(0.1, -0.1, a);
+    p.face = FACE.happy;
+  } else {
+    const a = sstep(0.55, 1, u);
+    p.z = 0.18 * H * (1 - a);
+    p.pitch = 0.2 * (1 - a);
+    p.sq = -0.1 * (1 - a) + 0.06 * Math.sin(Math.PI * a);
+    if (a < 0.5) p.face = FACE.happy;
+  }
+}
 
 class Critter implements CritterModel {
   root: TransformNode;
@@ -202,6 +266,14 @@ class Critter implements CritterModel {
   earDroop = 0;
   flutter = 0;
   private flutterT = 5;
+  /** gallop blend (0 = trot, 1 = full gallop) */
+  gal = 0;
+  /** attack progress 0..1, or -1 when not attacking */
+  atkU = -1;
+  private atkT = 0;
+  readonly ap: AtkPose = { z: 0, y: 0, pitch: 0, roll: 0, sq: 0, hp: 0, hz: 0, hy: 0, face: -1 };
+  seatY?: number;
+  seat?: TransformNode;
 
   constructor(rig: Rig, cfg: Cfg) {
     this.rig = rig;
@@ -210,6 +282,8 @@ class Critter implements CritterModel {
     this.height = cfg.height;
     this.radius = cfg.radius;
     this.rand = rng(0x51f15e + seedCounter++ * 7919);
+    this.seatY = rig.seatY;
+    this.seat = rig.seat;
     this.headRest = rig.head.position.clone();
     this.blinkT = 1 + this.rand() * 3;
     this.lookT = 0.5 + this.rand() * 2;
@@ -220,6 +294,13 @@ class Critter implements CritterModel {
   emote(kind: EmoteKind) {
     this.emK = kind;
     this.emT = 0;
+  }
+
+  /** quick attack animation; repeated calls while one is mid-swing are ignored */
+  attack() {
+    if (this.atkU >= 0 && this.atkU < 0.75) return;
+    this.atkT = 0;
+    this.atkU = 0;
   }
 
   setEnabled(on: boolean) {
@@ -307,6 +388,21 @@ class Critter implements CritterModel {
       pitch = 0.22 * mv;
       roll = Math.sin(t * 1.3) * 0.06 * awake;
       sq = Math.sin(th) * 0.03 * awake;
+    } else if (c.gait === "gallop") {
+      // trot that opens up into a rocking-horse gallop as speed → 1
+      const g = (this.gal = sstep(0.5, 0.92, mv));
+      this.phase = (this.phase + dt * c.freq * (0.8 + 0.2 * mv + 0.25 * g) * (1 + 0.15 * ex) * Math.min(1, mv * 2.5)) % 1;
+      th = this.phase * TAU;
+      const yT = c.bob * mv * Math.abs(Math.sin(th));
+      const air = Math.max(0, Math.sin(th));
+      // one big bound per stride: up while the legs are stretched out (suspension), down as they gather
+      const yG = c.hopH * (0.35 + 0.65 * air * air) - c.hopH * 0.2;
+      y = lerp(yT, yG, g);
+      // nose dips as the front legs land, rises as the hind legs gather under (rocking horse)
+      pitch = lerp(0.03 * mv * Math.sin(2 * th) + 0.03 * mv, -c.pitch * Math.cos(th), g);
+      sq = lerp(-0.03 * mv * Math.cos(2 * th), -c.squash * Math.sin(th), g);
+      headBobP = lerp(-0.05 * mv * Math.sin(2 * th), 0.6 * c.pitch * Math.cos(th) + 0.1 * Math.sin(th), g);
+      this.air = air * g;
     } else {
       this.phase = (this.phase + dt * rate * Math.min(1, mv * 2.5)) % 1;
       th = this.phase * TAU;
@@ -393,18 +489,38 @@ class Critter implements CritterModel {
       }
     }
 
+    /* ---------------- attack ---------------- */
+    const ap = this.ap;
+    ap.z = ap.y = ap.pitch = ap.roll = ap.sq = ap.hp = ap.hz = ap.hy = 0;
+    ap.face = -1;
+    if (this.atkU >= 0) {
+      this.atkT += dt;
+      const u = this.atkT / c.attackDur;
+      if (u >= 1) this.atkU = -1;
+      else {
+        this.atkU = u;
+        (R.attackPose ?? genericAttack)(this, u, ap);
+        if (ap.face >= 0) face = ap.face;
+      }
+    }
+
     /* ---------------- base transform ---------------- */
+    sq += ap.sq;
     let sy = 1 + sq + br;
     let sxz = 1 - sq * 0.5 - br * 0.4;
     sy *= 1 - 0.08 * sl;
     sxz *= 1 + 0.05 * sl;
     sy *= 1 + eSq;
     sxz *= 1 - eSq * 0.5;
-    const by = y * awake - c.sleepDrop * sl + eY;
+    const by = y * awake - c.sleepDrop * sl + eY + ap.y;
     const base = R.base;
-    base.position.set(0, by, eZ);
-    base.rotation.set(pitch * awake, yaw + eYaw, roll + eRoll + c.sleepRoll * sl);
+    const bp = pitch * awake + ap.pitch;
+    const pp = c.pitchPivot;
+    base.position.set(0, by + pp * (1 - Math.cos(bp)), eZ + ap.z - pp * Math.sin(bp));
+    base.rotation.set(bp, yaw + eYaw, roll + eRoll + c.sleepRoll * sl + ap.roll);
     base.scaling.set(sxz, sy, sxz);
+    // the seat rides the bob / pitch but not the squash
+    if (R.seat) R.seat.scaling.set(1 / sxz, 1 / sy, 1 / sxz);
 
     /* ---------------- secondary-motion springs ---------------- */
     const top = by + sy * H * 0.6;
@@ -466,11 +582,11 @@ class Critter implements CritterModel {
     this.lookTilt = damp(this.lookTilt, this.tTilt * lk, 3.5, dt);
     const hd = R.head;
     hd.rotation.set(
-      this.lookPitch + c.sleepHeadPitch * sl + eHP * c.look + headBobP + (c.gait === "hover" ? 0 : 0),
+      this.lookPitch + c.sleepHeadPitch * sl + eHP * c.look + headBobP * awake + ap.hp,
       this.lookYaw + c.sleepHeadYaw * sl,
       this.lookTilt + c.sleepHeadRoll * sl + eHR * c.look + ex * still * 0.12 * Math.sin(t * 5) * c.look,
     );
-    hd.position.set(this.headRest.x, this.headRest.y + jig * c.headLag - c.sleepHeadDrop * sl, this.headRest.z);
+    hd.position.set(this.headRest.x, this.headRest.y + jig * c.headLag - c.sleepHeadDrop * sl + ap.hy, this.headRest.z + ap.hz);
 
     /* ---------------- ears ---------------- */
     for (let i = 0; i < R.ears.length; i++) {
@@ -532,7 +648,15 @@ class Critter implements CritterModel {
       let dz = 0,
         dy = 0,
         rx = 0;
-      if (hop) {
+      if (c.gait === "gallop") {
+        // legs swing from the hip; the swinging-forward leg lifts and folds (fake knee)
+        const g = this.gal;
+        const a = th + lerp(L.ph, L.ph2 ?? L.ph, g) * TAU;
+        const up = Math.max(0, Math.cos(a)) * mv * awake;
+        rx = -(L.swing ?? 0.35) * L.k * (1 + 0.7 * g) * Math.sin(a) * mv * awake + (L.sleepRx ?? 0) * sl;
+        dy = c.lift * up * (1 + 0.6 * g);
+        L.n.scaling.y = 1 - 0.2 * up - 0.25 * sl;
+      } else if (hop) {
         dz = L.hopDz * this.air;
         rx = L.hopRx * this.air;
       } else if (c.gait !== "hover") {
@@ -680,6 +804,9 @@ function finish(c: Ctx, cfg: Partial<Cfg>, rig: Partial<Rig> & { head: Transform
     sparkle: rig.sparkle,
     sparklePos: rig.sparklePos,
     hook: rig.hook,
+    attackPose: rig.attackPose,
+    seat: rig.seat,
+    seatY: rig.seatY,
     nodes: rig.nodes ?? {},
   };
   const cr = new Critter(full, { ...DEF, ...cfg });
@@ -1489,6 +1616,632 @@ function buildRedpanda(c: Ctx): Critter {
   );
 }
 
+/* ------------------------------------------------------------------ */
+/* Riders: Clover Pony & Moonbeam Unicorn (shared chubby equine rig)    */
+/* ------------------------------------------------------------------ */
+
+/** Quadratic Bézier in rig space. */
+const qbez = (a: V3, b: V3, c: V3, u: number): V3 => {
+  const v = 1 - u;
+  return [v * v * a[0] + 2 * v * u * b[0] + u * u * c[0], v * v * a[1] + 2 * v * u * b[1] + u * u * c[1], v * v * a[2] + 2 * v * u * b[2] + u * u * c[2]];
+};
+
+function buildEquine(c: Ctx, uni: boolean): Critter {
+  const R = c.rare;
+  // mane colours cycle along the crest / tail; `sock` = fluffy fetlocks
+  const P = uni
+    ? R
+      ? { coat: "#d3cdf7", coatB: "#b9b0ec", belly: "#ece8ff", muzzle: "#f1eeff", inner: "#f4c4e4", nose: "#8f7bc4", hoof: "#f2eaff", hoofB: "#cbbcf2", sock: "#f4f1ff",
+          mane: ["#7fd6e8", "#b7a2f2", "#f3f0ff", "#8fb8f6", "#d9b2f4", "#a6ece0"], blanket: "#8fb8f6", trim: "#f3f0ff", emblem: "#fff1a8",
+          horn: "#eefaff", hornB: "#bfe9ff", hornE: "#6cb8dc", star: "#fff1a8", glint: "#ffffff" }
+      : { coat: "#fbf7ff", coatB: "#e9dffb", belly: "#ffffff", muzzle: "#fff7fb", inner: "#ffc6dc", nose: "#c9a6d8", hoof: "#fff3c8", hoofB: "#f3d9a0", sock: "#ffffff",
+          mane: ["#ffb3cf", "#ffd2a6", "#fff0a6", "#bdeed2", "#b6dcff", "#d4c0ff"], blanket: "#d4c0ff", trim: "#fff6e6", emblem: "#ffb3cf",
+          horn: "#fff2c2", hornB: "#ffcf86", hornE: "#dcb35a", star: "#ffd1e8", glint: "#ffffff" }
+    : R
+      ? { coat: "#ffd4df", coatB: "#f6b5c6", belly: "#fff0f3", muzzle: "#fff3f2", inner: "#ffb6c8", nose: "#c97b8f", hoof: "#c98a96", hoofB: "#ad6f7e", sock: "#fffaf2",
+          mane: ["#fff7e6", "#ffe39a", "#fff7e6", "#ffd27a"], blanket: "#bfe9d6", trim: "#fffaf2", emblem: "#ff8fb0",
+          horn: "", hornB: "", hornE: "", star: "", glint: "#ffffff" }
+      : { coat: "#fbe1c6", coatB: "#f0c59f", belly: "#fff3e3", muzzle: "#fff5ea", inner: "#ffbfcf", nose: "#b9806c", hoof: "#b98370", hoofB: "#9c6a5a", sock: "#fffaf0",
+          mane: ["#ffb7d0", "#d2bdf7", "#ffcadb", "#c3aef0"], blanket: "#b6dcf7", trim: "#fff6e6", emblem: "#ff8fb0",
+          horn: "", hornB: "", hornE: "", star: "", glint: "#ffffff" };
+  const mane = (i: number) => P.mane[((i % P.mane.length) + P.mane.length) % P.mane.length];
+  const { scene: s, k } = c;
+  const SEAT = 0.92;
+
+  /* ---- body: round barrel + chest + neck, mane crest and a little saddle blanket ---- */
+  const BE: Ell = { c: [0, 0.6, -0.06], r: [0.33, 0.295, 0.45] };
+  const body: Mesh[] = [
+    blobM(s, BE.r, BE.c, P.coat, undefined, P.coatB, 16),
+    capOn(s, BE, 0, -Math.PI / 2, 0.75, P.belly, { sx: 0.8, sy: 1.25 }),
+    blobM(s, [0.265, 0.27, 0.21], [0, 0.67, 0.22], P.coat, undefined, P.coatB, 12),
+    blobM(s, [0.16, 0.25, 0.16], [0, 0.95, 0.27], P.coat, [0.45, 0, 0], undefined, 12),
+  ];
+  // saddle blanket: scalloped trim, coloured cloth, puffy seat pad, heart on each side
+  body.push(capOn(s, BE, 0, Math.PI / 2, 0.76, P.trim, { sx: 1.45, sy: 0.82, lift: 0.005, wob: 0.06, seed: 2, segs: 40 }));
+  body.push(capOn(s, BE, 0, Math.PI / 2, 0.68, P.blanket, { sx: 1.45, sy: 0.8, lift: 0.011, segs: 40 }));
+  body.push(blobM(s, [0.17, 0.05, 0.17], [0, SEAT - 0.025, -0.04], P.trim, undefined, P.blanket, 12));
+  for (const sd of [-1, 1]) {
+    const hp = surf(BE, sd * Math.PI * 0.5, 0.3, 0.016);
+    body.push(heartM(s, 0.07, 0.018, hp.p, P.emblem, rotZTo(hp.n)));
+  }
+  // mane crest: overlapping puffs from behind the ears down to the withers
+  const mA: V3 = [0, 1.26, 0.33],
+    mC: V3 = [0, 1.18, 0.12],
+    mB: V3 = [0, 0.9, 0.05];
+  const NM = 8;
+  for (let i = 0; i < NM; i++) {
+    const u = i / (NM - 1);
+    const p = qbez(mA, mC, mB, u);
+    const r = 0.1 - 0.03 * u;
+    body.push(ballM(s, r, p, mane(i), undefined, 10));
+    // side fluff so the crest reads from every angle (the unicorn's mane flows down further)
+    for (const sd of [-1, 1]) {
+      body.push(ballM(s, r * 0.82, add(p, [sd * 0.075, -0.06, 0.03]), mane(i + 1), undefined, 8));
+      if (uni && i > 0 && i < NM - 1) body.push(ballM(s, r * 0.7, add(p, [sd * 0.11, -0.14, 0.05]), mane(i + 2), undefined, 8));
+    }
+  }
+  if (uni) {
+    // tiny star mark on the flank
+    for (const sd of [-1, 1]) {
+      const sp = surf(BE, sd * 2.05, 0.18, 0.014);
+      body.push(puffStar(s, 5, 0.06, 0.027, 0.014, sp.p, P.star, rotZTo(sp.n)));
+    }
+  }
+  k.part("body", c.base, [0, 0, 0], body);
+
+  /* ---- legs: four chubby legs with fluffy socks and little hooves ---- */
+  const legs: Leg[] = [];
+  const hoofProf: [number, number][] = [[0, 0], [0.082, 0], [0.094, 0.018], [0.093, 0.066], [0.08, 0.088], [0, 0.088]];
+  const LEGS: [number, number, number, number][] = [
+    // x, z, trot phase, gallop phase  (front legs reach together, hind legs push together)
+    [-0.15, 0.2, 0.0, 0.0],
+    [0.15, 0.2, 0.5, 0.08],
+    [-0.15, -0.3, 0.5, 0.5],
+    [0.15, -0.3, 0.0, 0.58],
+  ];
+  LEGS.forEach(([x, z, ph, ph2], i) => {
+    const front = z > 0;
+    const piv: V3 = [x, 0.46, z];
+    const ln = k.node("leg" + i, c.base, piv);
+    const lm: Mesh[] = [
+      blobM(s, [0.1, 0.23, 0.105], [x, 0.29, z], P.coat, undefined, P.coatB, 10),
+      lathe(s, hoofProf.map(([r, y]) => [r * 1.1, y] as [number, number]), { color: P.hoof, bottom: P.hoofB, pos: [x, 0, z + 0.008] }, 14),
+    ];
+    if (!front) lm.push(blobM(s, [0.125, 0.15, 0.15], [x * 0.92, 0.43, z - 0.02], P.coat, undefined, P.coatB, 10));
+    for (let j = 0; j < 8; j++) {
+      const a = (j / 8) * TAU;
+      lm.push(ballM(s, 0.042, [x + Math.sin(a) * 0.088, 0.115 + Math.cos(a * 2) * 0.006, z + 0.008 + Math.cos(a) * 0.09], P.sock, undefined, 6));
+    }
+    if (uni) {
+      // sparkly hooves: a few tiny glints
+      for (const [ya, yy] of [[0.4, 0.05], [-0.5, 0.035], [0.05, 0.03], [1.2, 0.045], [-1.1, 0.05]] as const) lm.push(ballM(s, 0.013, [x + Math.sin(ya) * 0.103, yy, z + 0.008 + Math.cos(ya) * 0.103], P.glint, undefined, 4));
+    }
+    k.part("legMesh" + i, ln, piv, lm);
+    legs.push({ ...leg(ln, ph, x > 0 ? 1 : -1, 0.0, 1), ph2, swing: front ? 0.42 : 0.38, sleepRx: front ? -1.25 : 1.2 });
+  });
+
+  /* ---- head ---- */
+  const hp: V3 = [0, 1.02, 0.35];
+  const head = k.node("head", c.base, hp);
+  const HE: Ell = { c: [0, 1.1, 0.45], r: [0.215, 0.19, 0.2] };
+  const MU: Ell = { c: [0, 1.005, 0.6], r: [0.152, 0.11, 0.125] };
+  const hs = (): Mesh[] => {
+    const hs: Mesh[] = [
+      blobM(s, HE.r, HE.c, P.coat, undefined, P.coatB, 16),
+      blobM(s, MU.r, MU.c, P.muzzle, undefined, undefined, 14),
+    ];
+    // nostrils
+    for (const sd of [-1, 1]) hs.push(decal(s, MU, sd * 0.36, 0.32, [0.017, 0.012, 0.012], P.nose, 0.4, sd * 0.4, 6));
+    // forelock: a fluffy fringe between the ears
+    const fl: [V3, number][] = [
+      [[0, 1.27, 0.47], 0.068],
+      [[-0.06, 1.25, 0.5], 0.052],
+      [[0.06, 1.25, 0.5], 0.052],
+      [[0.02, 1.29, 0.4], 0.06],
+    ];
+    fl.forEach(([p, r], i) => hs.push(ballM(s, r, p, mane(i * 2 + 1), undefined, 8)));
+    if (uni) {
+      // horn base ring
+      hs.push(blobM(s, [0.06, 0.024, 0.06], [0, 1.272, 0.53], P.hornB, [0.45, 0, 0], undefined, 8));
+    }
+    if (R && !uni) hs.push(...flower(c, [0.15, 1.27, 0.44], [0.6, 0.7, 0.3], "#ffffff", "#ffd85a", 1.15));
+    if (R && uni) hs.push(...bow(c, [-0.14, 1.27, 0.38], "#b7a2f2", [0, -0.3, 0.4], 1.1));
+    return hs;
+  };
+  const faces = buildHeads(k, head, hp, hs, {
+    head: HE,
+    eyeYaw: 0.5,
+    eyePitch: 0.13,
+    eyeW: 0.043,
+    eyeH: 0.058,
+    line: 0.011,
+    cheekYaw: 0.86,
+    cheekPitch: -0.1,
+    cheekR: 0.04,
+    mouth: { ell: MU, pitch: -0.25, w: 0.03, h: 0.016, style: "smile" },
+  });
+  if (uni) {
+    const hn: V3 = [0, 1.27, 0.53];
+    const horn = spiralHorn(s, 0.25, 0.052, hn, [0.45, 0, 0], P.horn, P.hornB, 2.6);
+    k.part("horn", head, hn, [horn], { outline: 0.01, material: toonMat(s, { name: "unicornHorn" + (R ? "R" : ""), emissive: P.hornE, rim: 0.2 }), shadow: true });
+  }
+  const ears: Ear[] = [];
+  for (const sd of [-1, 1]) {
+    const piv: V3 = [sd * 0.11, 1.24, 0.4];
+    const en = k.node("ear" + sd, head, piv);
+    k.part("earMesh" + sd, en, piv, coneEar(c, sd, piv, 0.15, 0.062, 0.36, 0.18, P.coat, P.inner, undefined, 0.6, 0.22));
+    ears.push(ear(en, sd, 0.45, 0.5, 0.45));
+  }
+
+  /* ---- tail: big fluffy puff-chain ---- */
+  const tp: V3 = [0, 0.8, -0.48];
+  const tn = k.node("tail", c.base, tp);
+  const tail: Mesh[] = [];
+  const NT = uni ? 11 : 9;
+  const TL = uni ? 1.25 : 1;
+  for (let i = 0; i < NT; i++) {
+    const u = i / (NT - 1);
+    const p: V3 = [Math.sin(u * 2.4) * 0.035, 0.83 - 0.36 * TL * u - 0.06 * u * u, -0.52 - 0.2 * TL * Math.sin(u * 1.9) + 0.02 * u];
+    const r = 0.065 + 0.055 * Math.sin(Math.min(1, u * 1.1) * Math.PI * 0.82);
+    tail.push(ballM(s, r, p, mane(i), undefined, 10));
+    if (i > 2) tail.push(ballM(s, r * 0.7, add(p, [(i % 2 ? 1 : -1) * r * 0.6, 0.01, -r * 0.3]), mane(i + 1), undefined, 8));
+  }
+  k.part("tailMesh", tn, tp, tail);
+  const tails: Tail[] = [{ n: tn, amp: 0.2, f: 1.8, walk: 0.18, gain: 0.35, curlY: 0.9, curlX: 0.15, axis: "y" }];
+
+  const seat = k.node("seat", c.base, [0, SEAT, 0]);
+  const hornM = uni ? head.getChildMeshes(true).find((m) => m.name === "horn") : undefined;
+  const rig: Partial<Rig> & { head: TransformNode; faces: Mesh[] } = {
+    head,
+    faces,
+    ears,
+    tails,
+    legs,
+    seat,
+    seatY: SEAT,
+    nodes: { tail: tn },
+    hook: (cr) => {
+      // tail streams out behind at speed and flicks with each bound
+      const th = cr.phase * TAU;
+      tn.rotation.x += cr.move * (0.55 + 0.45 * cr.gal) + cr.gal * 0.22 * Math.sin(th + 1.2) - 0.3 * cr.sleep;
+      if (hornM) {
+        const p = 0.97 + 0.03 * Math.sin(cr.t * 2.2);
+        hornM.scaling.set(p, 1, p);
+      }
+    },
+  };
+  if (R) addSparkle(c, rig, [-0.34, 1.45, 0.35]);
+  return finish(
+    c,
+    uni
+      ? { gait: "gallop", freq: 1.75, bob: 0.05, hopH: 0.15, squash: 0.05, pitch: 0.08, stride: 0, lift: 0.07, height: 1.3, radius: 0.5, look: 0.8, headLag: 0.03, pitchPivot: 0.6, sleepDrop: 0.3, sleepHeadPitch: 0.35, sleepHeadYaw: 0.35, sleepHeadRoll: 0.2, sleepHeadDrop: 0.08, sleepRoll: 0.0, attackDur: 0.5 }
+      : { gait: "gallop", freq: 2.05, bob: 0.045, hopH: 0.11, squash: 0.05, pitch: 0.1, stride: 0, lift: 0.07, height: 1.3, radius: 0.5, look: 0.8, headLag: 0.03, pitchPivot: 0.6, sleepDrop: 0.3, sleepHeadPitch: 0.35, sleepHeadYaw: 0.35, sleepHeadRoll: 0.2, sleepHeadDrop: 0.08, sleepRoll: 0.0, attackDur: 0.5 },
+    rig,
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Guardians: Emberling, Roarlet, Shellby                              */
+/* ------------------------------------------------------------------ */
+
+function buildEmberling(c: Ctx): Critter {
+  const P = c.rare
+    ? { skin: "#c9b6ff", skinB: "#ad97f2", belly: "#fff4d6", stripe: "#f3dcb0", spike: "#ff9fc8", spikeT: "#ffd6ea", horn: "#fff6dc", wing: "#ffa8cf", wingIn: "#ffd9ea", claw: "#fff6e6", heart: "#ff8fb8", nose: "#7a5fb8", glow: "#ffb3dc", glowE: "#c8508c", fire: "#ffd1f0", fireE: "#d870b8" }
+    : { skin: "#ffb48a", skinB: "#f7976a", belly: "#fff1d2", stripe: "#f6d6a8", spike: "#ff8b6e", spikeT: "#ffc59a", horn: "#fff3d6", wing: "#ff957a", wingIn: "#ffc9a6", claw: "#fff6e6", heart: "#ff8aa6", nose: "#c45f44", glow: "#ffb070", glowE: "#d8622c", fire: "#fff0a0", fireE: "#e0a040" };
+  const { scene: s, k } = c;
+  // pear-shaped tummy with a striped cream belly, little back spikes and nub arms
+  const BE: Ell = { c: [0, 0.24, -0.02], r: [0.2, 0.2, 0.185] };
+  const body: Mesh[] = [blobM(s, BE.r, BE.c, P.skin, undefined, P.skinB, 14), capOn(s, BE, 0, -0.28, 0.66, P.belly, { sx: 0.95, sy: 1.1 })];
+  for (const pit of [-0.12, -0.36, -0.6]) {
+    const w = 0.34 * Math.cos(pit + 0.25);
+    body.push(...arcOn(s, BE, [[-w, pit], [-w * 0.5, pit - 0.03], [0, pit - 0.04], [w * 0.5, pit - 0.03], [w, pit]], 0.007, P.stripe, 0.004));
+  }
+  for (const [pit, h] of [[0.55, 0.085], [0.18, 0.08], [-0.2, 0.065]] as const) {
+    const sp = surf(BE, Math.PI, pit, -0.012);
+    body.push(softConeM(s, h, 0.038, sp.p, P.spikeT, rotYTo(sp.n), P.spike, [1, 1, 0.55], 8, 0.32));
+  }
+  for (const sd of [-1, 1]) {
+    body.push(blobM(s, [0.048, 0.07, 0.05], [sd * 0.175, 0.27, 0.09], P.skin, [0.5, 0, sd * 0.5]));
+    body.push(ballM(s, 0.014, [sd * 0.2, 0.215, 0.135], P.claw, undefined, 4));
+  }
+  k.part("body", c.base, [0, 0, 0], body);
+
+  // feet with tiny cream claws
+  const legs: Leg[] = [];
+  for (const sd of [-1, 1]) {
+    const fn = k.node("foot" + sd, c.base, [0, 0, 0]);
+    const fm: Mesh[] = [blobM(s, [0.068, 0.055, 0.085], [sd * 0.1, 0.048, 0.04], P.skin, undefined, P.skinB)];
+    for (let i = -1; i <= 1; i++) fm.push(ballM(s, 0.017, [sd * 0.1 + i * 0.03, 0.025, 0.118 - Math.abs(i) * 0.012], P.claw, undefined, 5));
+    k.part("footMesh" + sd, fn, [0, 0, 0], fm);
+    legs.push(leg(fn, sd > 0 ? 0 : 0.5, sd, 0.03));
+  }
+
+  const hp: V3 = [0, 0.4, 0.03];
+  const head = k.node("head", c.base, hp);
+  const HE: Ell = { c: [0, 0.53, 0.05], r: [0.215, 0.185, 0.19] };
+  const MU: Ell = { c: [0, 0.47, 0.2], r: [0.115, 0.075, 0.085] };
+  const hs = (): Mesh[] => {
+    const hs: Mesh[] = [blobM(s, HE.r, HE.c, P.skin, undefined, P.skinB, 14), blobM(s, MU.r, MU.c, P.belly, undefined, undefined, 12)];
+    for (const sd of [-1, 1]) {
+      hs.push(decal(s, MU, sd * 0.3, 0.42, [0.012, 0.009, 0.008], P.nose, 0.4, 0, 5));
+      // soft rounded horn nubs
+      const hn = surf(HE, sd * 0.42, 0.95, -0.01);
+      hs.push(softConeM(s, 0.085, 0.036, hn.p, P.horn, rotYTo([sd * 0.35, 0.9, -0.3]), undefined, undefined, 8, 0.45));
+      // little fin ears
+      const fe = surf(HE, sd * 1.4, 0.25, -0.01);
+      hs.push(softConeM(s, 0.09, 0.042, fe.p, P.spikeT, rotYTo([sd * 0.9, 0.35, -0.3]), P.spike, [1, 1, 0.45], 8, 0.3));
+    }
+    // crest spikes on the back of the head
+    for (const [pit, h] of [[0.7, 0.07], [0.35, 0.06]] as const) {
+      const sp = surf(HE, Math.PI, pit, -0.01);
+      hs.push(softConeM(s, h, 0.032, sp.p, P.spikeT, rotYTo(sp.n), P.spike, [1, 1, 0.55], 8, 0.32));
+    }
+    if (c.rare) hs.push(...crown(c, [0.04, 0.705, 0.02], 0.85, "#ffe17a"));
+    return hs;
+  };
+  const faces = buildHeads(k, head, hp, hs, {
+    head: HE,
+    eyeYaw: 0.42,
+    eyePitch: 0.13,
+    eyeW: 0.04,
+    eyeH: 0.053,
+    mouth: { ell: MU, pitch: -0.4, w: 0.026, h: 0.014, style: "w" },
+    fang: true,
+  });
+  // warm glowing cheeks (emissive, outside the outline)
+  const gl: Mesh[] = [];
+  for (const sd of [-1, 1]) gl.push(decal(s, HE, sd * 0.78, -0.12, [0.048, 0.03, 0.02], P.glow, -0.25, 0, 8));
+  const glowM = k.part("glow", head, hp, gl, { outline: false, material: toonMat(s, { name: "emberGlow" + (c.rare ? "R" : ""), emissive: P.glowE, rim: 0 }), shadow: false });
+  // sparkle-sneeze burst (only shown mid-attack)
+  const bp: V3 = [0, 0.45, 0.33];
+  const burstN = k.node("burst", head, bp);
+  const burst: Mesh[] = [puffStar(s, 5, 0.085, 0.04, 0.025, bp, P.fire)];
+  for (let i = 0; i < 5; i++) {
+    const a = (i / 5) * TAU + 0.3;
+    burst.push(puffStar(s, 4, 0.035, 0.014, 0.012, add(bp, [Math.cos(a) * 0.12, Math.sin(a) * 0.1, 0.03]), "#ffffff", [0, 0, a]));
+  }
+  const burstM = k.part("burstMesh", burstN, bp, burst, { outline: false, material: toonMat(s, { name: "emberFire" + (c.rare ? "R" : ""), emissive: P.fireE, rim: 0 }), shadow: false });
+  burstN.setEnabled(false);
+
+  // tiny rounded wings that flutter
+  const wings: Wing[] = [];
+  const wingNodes: TransformNode[] = [];
+  for (const sd of [-1, 1]) {
+    const piv: V3 = [sd * 0.1, 0.36, -0.15];
+    const wn = k.node("wing" + sd, c.base, piv);
+    const rot: V3 = [0.15, -sd * 0.55, sd * 0.35];
+    const ctr = add(piv, rotDir(rot, [sd * 0.1, 0.02, 0]));
+    const wm: Mesh[] = [
+      blobM(s, [0.11, 0.075, 0.016], ctr, P.wing, rot, undefined, 10),
+      blobM(s, [0.075, 0.048, 0.012], add(ctr, rotDir(rot, [sd * 0.005, -0.01, 0.008])), P.wingIn, rot, undefined, 10),
+      blobM(s, [0.05, 0.035, 0.014], add(ctr, rotDir(rot, [sd * 0.06, -0.055, 0])), P.wing, [rot[0], rot[1], rot[2] + sd * 0.4], undefined, 8),
+      blobM(s, [0.05, 0.035, 0.014], add(ctr, rotDir(rot, [-sd * 0.02, -0.06, 0])), P.wing, [rot[0], rot[1], rot[2] - sd * 0.2], undefined, 8),
+      ballM(s, 0.022, add(ctr, rotDir(rot, [sd * 0.1, 0.05, 0])), P.spike, undefined, 6),
+    ];
+    k.part("wingMesh" + sd, wn, piv, wm, { outline: 0.014 });
+    wings.push({ n: wn, side: sd, rest: 0.15, amp: 0.8, kind: "bird" });
+    wingNodes.push(wn);
+  }
+
+  // fat tail curling up at the end into a little heart
+  const tp: V3 = [0, 0.15, -0.17];
+  const tn = k.node("tail", c.base, tp);
+  const tail: Mesh[] = [];
+  const NT = 8;
+  let end: V3 = tp;
+  for (let i = 0; i < NT; i++) {
+    const u = i / (NT - 1);
+    const p: V3 = [Math.sin(u * 2.2) * 0.07, 0.13 - 0.07 * Math.sin(u * 2.4) + 0.2 * u * u * u, -0.2 - 0.26 * u + 0.05 * u * u * u];
+    tail.push(ballM(s, 0.085 - 0.05 * u, p, P.skin, P.skinB, 10));
+    end = p;
+  }
+  tail.push(heartM(s, 0.068, 0.028, add(end, [0, 0.065, -0.01]), P.heart, [0, Math.PI / 2 - 0.4, 0]));
+  k.part("tailMesh", tn, tp, tail);
+  const tails: Tail[] = [{ n: tn, amp: 0.28, f: 2.2, walk: 0.3, gain: 0.4, curlY: 1.4, curlX: -0.1, axis: "y" }];
+
+  const rig: Partial<Rig> & { head: TransformNode; faces: Mesh[] } = {
+    head,
+    faces,
+    legs,
+    wings,
+    tails,
+    nodes: { tail: tn, burst: burstN },
+    attackPose: (cr, u, p) => {
+      if (u < 0.45) {
+        // "ah… ah…": nose up, big inhale, eyes scrunched
+        const a = sstep(0, 0.45, u);
+        p.hp = -0.38 * a;
+        p.sq = -0.1 * a;
+        p.z = -0.03 * a;
+        p.pitch = -0.08 * a;
+        p.face = FACE.closed;
+      } else if (u < 0.62) {
+        // "CHOO!"
+        const a = sstep(0.45, 0.54, u);
+        p.hp = lerp(-0.38, 0.32, a);
+        p.sq = lerp(-0.1, 0.14, a);
+        p.z = lerp(-0.03, 0.06, a);
+        p.pitch = lerp(-0.08, 0.12, a);
+        p.face = FACE.happy;
+      } else {
+        const a = sstep(0.62, 1, u);
+        p.hp = 0.32 * (1 - a);
+        p.sq = 0.14 * (1 - a) - 0.04 * Math.sin(Math.PI * a);
+        p.z = 0.06 * (1 - a);
+        p.pitch = 0.12 * (1 - a);
+        if (a < 0.6) p.face = FACE.happy;
+      }
+      void cr;
+    },
+    hook: (cr) => {
+      const u = cr.atkU;
+      // wings: a lazy idle flutter, frantic flapping during the sneeze
+      const flap = u >= 0 ? (u < 0.45 ? 0.5 + 0.5 * Math.sin(cr.t * 30) : 0.9 * (1 - sstep(0.6, 1, u))) : 0;
+      for (const w of wingNodes) {
+        const sd = w === wingNodes[0] ? -1 : 1;
+        w.rotation.z += sd * (0.08 * Math.sin(cr.t * 3.1) * (1 - cr.sleep) + flap * (0.5 + 0.5 * Math.sin(cr.t * 38)));
+      }
+      // cheeks glow brighter as it winds up
+      const g = 1 + (u >= 0 ? 0.45 * Math.sin(Math.PI * Math.min(1, u / 0.62)) : 0) + 0.06 * Math.sin(cr.t * 2.6);
+      glowM.scaling.set(g, g, g);
+      // the sneeze burst
+      const on = u >= 0.47 && u < 0.92;
+      if (burstN.isEnabled() !== on) burstN.setEnabled(on);
+      if (on) {
+        const a = (u - 0.47) / 0.45;
+        const sc = 0.4 + 1.3 * Math.sin(Math.PI * Math.min(1, a * 1.6)) * (1 - a * 0.3);
+        burstN.scaling.set(sc, sc, sc);
+        burstN.position.z = cr.rig.head.position.z * 0 + 0.33 - 0.03 + a * 0.12;
+        burstM.rotation.z = a * 2.4;
+      }
+    },
+  };
+  if (c.rare) addSparkle(c, rig, [-0.3, 0.8, 0.05]);
+  return finish(c, { gait: "waddle", freq: 2.7, bob: 0.025, stride: 0.05, lift: 0.045, roll: 0.13, height: 0.75, radius: 0.27, look: 0.75, headLag: 0.02, sleepDrop: 0.03, sleepHeadPitch: 0.32, sleepHeadRoll: 0.22, sleepHeadDrop: 0.03, attackDur: 0.45 }, rig);
+}
+
+function buildRoarlet(c: Ctx): Critter {
+  const P = c.rare
+    ? { fur: "#fff7ee", furB: "#f2e4dc", cream: "#ffffff", mane: "#f3b3d6", maneB: "#d9a2e8", inner: "#ffc6d8", nose: "#e88ca8", tuft: "#e8a6dc", paw: "#fff0f4" }
+    : { fur: "#ffd98a", furB: "#f6bf66", cream: "#fff3d8", mane: "#ffaa5e", maneB: "#f48d4a", inner: "#ffc2b0", nose: "#c96f5c", tuft: "#f48d4a", paw: "#fff0d6" };
+  const { scene: s, k } = c;
+  const BE: Ell = { c: [0, 0.25, -0.05], r: [0.165, 0.155, 0.215] };
+  k.part("body", c.base, [0, 0, 0], [blobM(s, BE.r, BE.c, P.fur, undefined, P.furB, 12), capOn(s, BE, 0, -0.62, 0.62, P.cream, { sx: 1.1 }), blobM(s, [0.115, 0.1, 0.07], [0, 0.29, 0.13], P.cream)]);
+  const legs: Leg[] = [];
+  const LEGS: [number, number, number][] = [
+    [-0.09, 0.1, 0],
+    [0.09, 0.1, 0.5],
+    [-0.09, -0.17, 0.5],
+    [0.09, -0.17, 0],
+  ];
+  const legNodes: TransformNode[] = [];
+  LEGS.forEach(([x, z, ph], i) => {
+    const piv: V3 = [x, 0.17, z];
+    const ln = k.node("leg" + i, c.base, piv);
+    const lm: Mesh[] = [blobM(s, [0.056, 0.09, 0.058], [x, 0.09, z], P.fur, undefined, P.furB), blobM(s, [0.056, 0.034, 0.066], [x, 0.032, z + 0.014], P.paw)];
+    for (let j = -1; j <= 1; j++) lm.push(ballM(s, 0.011, [x + j * 0.022, 0.035, z + 0.075], P.inner, undefined, 4));
+    k.part("legMesh" + i, ln, piv, lm);
+    legs.push(leg(ln, ph, x > 0 ? 1 : -1, 0.06));
+    legNodes.push(ln);
+  });
+
+  const hp: V3 = [0, 0.36, 0.12];
+  const head = k.node("head", c.base, hp);
+  const HE: Ell = { c: [0, 0.47, 0.15], r: [0.18, 0.16, 0.165] };
+  const MU: Ell = { c: [0, 0.42, 0.28], r: [0.088, 0.06, 0.072] };
+  const hs = (): Mesh[] => {
+    const hs: Mesh[] = [blobM(s, HE.r, HE.c, P.fur, undefined, P.furB, 14), blobM(s, MU.r, MU.c, P.cream)];
+    // HUGE fluffy mane: a front ring framing the face + a fuller back layer
+    const N = 14;
+    for (let i = 0; i < N; i++) {
+      const a = (i / N) * TAU + 0.11;
+      const r = 0.088 + 0.01 * Math.sin(i * 2.7);
+      hs.push(ballM(s, r, [Math.cos(a) * 0.205, 0.465 + Math.sin(a) * 0.19, 0.075 - 0.02 * Math.abs(Math.cos(a))], i % 2 ? P.mane : P.maneB, undefined, 10));
+    }
+    for (let i = 0; i < 9; i++) {
+      const a = (i / 9) * TAU + 0.35;
+      hs.push(ballM(s, 0.1, [Math.cos(a) * 0.13, 0.465 + Math.sin(a) * 0.125, -0.02], i % 2 ? P.maneB : P.mane, undefined, 10));
+    }
+    hs.push(ballM(s, 0.12, [0, 0.47, -0.05], P.maneB, undefined, 10));
+    // round ears peeking out of the mane
+    for (const sd of [-1, 1]) {
+      const ep = surf(HE, sd * 0.55, 0.85, 0.0);
+      hs.push(blobM(s, [0.055, 0.052, 0.028], ep.p, P.fur, rotZTo(ep.n), undefined, 10));
+      hs.push(blobM(s, [0.032, 0.03, 0.014], add(ep.p, ep.n, 0.02), P.inner, rotZTo(ep.n), undefined, 8));
+    }
+    if (c.rare) hs.push(...crown(c, [0, 0.6, 0.21], 1.0, "#ffd85a"));
+    return hs;
+  };
+  const faces = buildHeads(k, head, hp, hs, {
+    head: HE,
+    eyeYaw: 0.42,
+    eyePitch: 0.12,
+    eyeW: 0.036,
+    eyeH: 0.05,
+    cheekYaw: 0.74,
+    cheekPitch: -0.14,
+    cheekR: 0.032,
+    nose: { ell: MU, pitch: 0.5, r: 0.026, color: P.nose, w: 1.4 },
+    mouth: { ell: MU, pitch: 0.0, w: 0.024, h: 0.013, style: "w" },
+  });
+  // tail: thin swishy chain ending in a big tuft
+  const tp: V3 = [0, 0.26, -0.25];
+  const tn = k.node("tail", c.base, tp);
+  const tail: Mesh[] = [];
+  const NT = 9;
+  let end: V3 = tp;
+  for (let i = 0; i < NT; i++) {
+    const u = i / (NT - 1);
+    const p: V3 = [Math.sin(u * 2.2) * 0.03, 0.26 + 0.06 * Math.sin(u * 2) + 0.16 * u * u, -0.27 - 0.17 * Math.sin(u * 1.7)];
+    tail.push(ballM(s, 0.03 - 0.004 * u, p, P.fur, undefined, 6));
+    end = p;
+  }
+  tail.push(ballM(s, 0.06, add(end, [0, 0.04, -0.01]), P.tuft, undefined, 10), ballM(s, 0.042, add(end, [0.03, 0.08, 0.0]), P.mane, undefined, 8), ballM(s, 0.04, add(end, [-0.03, 0.075, -0.02]), P.mane, undefined, 8));
+  k.part("tailMesh", tn, tp, tail);
+  const tails: Tail[] = [{ n: tn, amp: 0.3, f: 2.4, walk: 0.3, gain: 0.5, curlY: 1.6, curlX: -0.4, axis: "y" }];
+  const rig: Partial<Rig> & { head: TransformNode; faces: Mesh[] } = {
+    head,
+    faces,
+    legs,
+    tails,
+    nodes: { tail: tn },
+    attackPose: (cr, u, p) => {
+      const H = cr.cfg.height;
+      if (u < 0.32) {
+        // crouch low with a wiggly bottom
+        const a = sstep(0, 0.32, u);
+        p.y = -0.035 * a;
+        p.z = -0.04 * H * a;
+        p.pitch = 0.12 * a;
+        p.roll = 0.06 * Math.sin(u * 60) * a;
+        p.sq = 0.1 * a;
+        p.hp = -0.1 * a;
+      } else if (u < 0.62) {
+        // POUNCE: spring forward, rearing up with a paw swipe
+        const a = (u - 0.32) / 0.3;
+        p.z = lerp(-0.04, 0.24, sstep(0, 1, a)) * H;
+        p.y = 0.13 * H * Math.sin(Math.PI * a);
+        p.pitch = lerp(0.12, -0.32, sstep(0, 0.5, a)) + 0.4 * sstep(0.55, 1, a);
+        p.sq = lerp(0.1, -0.12, sstep(0, 0.35, a)) + 0.12 * sstep(0.7, 1, a);
+        p.hp = 0.1 * a;
+        p.face = FACE.happy;
+      } else {
+        const a = sstep(0.62, 1, u);
+        p.z = 0.24 * H * (1 - a);
+        p.pitch = 0.08 * (1 - a);
+        p.sq = 0.12 * (1 - a) - 0.05 * Math.sin(Math.PI * a);
+        if (a < 0.5) p.face = FACE.happy;
+      }
+    },
+    hook: (cr) => {
+      const u = cr.atkU;
+      if (u >= 0.32 && u < 0.85) {
+        // front paws reach forward; the right one swipes down
+        const a = (u - 0.32) / 0.53;
+        const reach = Math.sin(Math.PI * Math.min(1, a * 1.4));
+        legNodes[0].rotation.x = -1.1 * reach;
+        legNodes[1].rotation.x = -1.3 * reach + 1.4 * sstep(0.35, 0.6, a) * reach;
+        legNodes[1].rotation.z = 0.25 * reach;
+        legNodes[2].rotation.x = 0.5 * reach;
+        legNodes[3].rotation.x = 0.5 * reach;
+      } else for (const n of legNodes) n.rotation.z = 0;
+    },
+  };
+  if (c.rare) addSparkle(c, rig, [0.3, 0.8, 0.1]);
+  return finish(c, { gait: "trot", freq: 2.8, bob: 0.035, stride: 0.07, lift: 0.06, height: 0.75, radius: 0.3, sleepDrop: 0.07, sleepHeadPitch: 0.2, sleepHeadYaw: 0.4, sleepHeadRoll: 0.38, sleepHeadDrop: 0.06, sleepRoll: 0.08, attackDur: 0.48 }, rig);
+}
+
+function buildShellby(c: Ctx): Critter {
+  const P = c.rare
+    ? { skin: "#c4e8f4", skinB: "#a6d6e8", shell: "#a7b4f0", shellB: "#8d9ae0", rim: "#fff1b8", under: "#fff6d8", emblem: "#ffd85a", helm: "#ffe48c", helmB: "#f0c457", band: "#fff3c4", plume: "#a6ecd2", plume2: "#d4f7ea", gem: "#ff9fc0" }
+    : { skin: "#bfead0", skinB: "#a3dcb8", shell: "#83cba2", shellB: "#6db78d", rim: "#eaf7d6", under: "#f6f1c9", emblem: "#ff8fb0", helm: "#e4e7f6", helmB: "#c2c7e2", band: "#cfd3ec", plume: "#ff9fbf", plume2: "#ffc8da", gem: "#ffd85a" };
+  const { scene: s, k } = c;
+  // shell shaped like a heraldic shield (broad front, pointed back) with a light rim and a heart emblem
+  const body: Mesh[] = [
+    shieldDome(s, [0.27, 0.215, 0.3], [0, 0.2, -0.04], P.shell, P.shellB, 0.5, 0.15, 20),
+    shieldDome(s, [0.295, 0.05, 0.325], [0, 0.19, -0.04], P.rim, undefined, 0.5, 1, 20),
+    blobM(s, [0.215, 0.055, 0.25], [0, 0.15, -0.03], P.under, undefined, undefined, 12),
+    // neck + little tail
+    blobM(s, [0.085, 0.085, 0.12], [0, 0.25, 0.2], P.skin, [-0.3, 0, 0]),
+    softConeM(s, 0.08, 0.035, [0, 0.17, -0.31], P.skin, [-2.0, 0, 0], undefined, [1, 1, 0.7], 8, 0.3),
+  ];
+  // emblem on top (lobes toward the head)
+  const emN: V3 = norm([0, 1, -0.28]);
+  const emP: V3 = [0, 0.41, -0.07];
+  if (c.rare) body.push(puffStar(s, 5, 0.1, 0.048, 0.022, emP, P.emblem, [rotZTo(emN)[0], rotZTo(emN)[1], Math.PI]));
+  else body.push(heartM(s, 0.095, 0.022, emP, P.emblem, [rotZTo(emN)[0], rotZTo(emN)[1], Math.PI]));
+  k.part("body", c.base, [0, 0, 0], body, { outline: 0.02 });
+
+  // stubby legs in two diagonal pairs
+  const legMesh = (x: number, zz: number) => {
+    const out = [blobM(s, [0.07, 0.075, 0.078], [x, 0.07, zz], P.skin, undefined, P.skinB, 10)];
+    for (let i = -1; i <= 1; i++) out.push(ballM(s, 0.013, [x + i * 0.026, 0.03, zz + 0.072], P.rim, undefined, 4));
+    return out;
+  };
+  const la = k.node("legsA", c.base, [0, 0.1, 0]);
+  k.part("legsAMesh", la, [0, 0.1, 0], [...legMesh(-0.2, 0.12), ...legMesh(0.18, -0.2)], { outline: 0.02 });
+  const lb = k.node("legsB", c.base, [0, 0.1, 0]);
+  k.part("legsBMesh", lb, [0, 0.1, 0], [...legMesh(0.2, 0.12), ...legMesh(-0.18, -0.2)], { outline: 0.02 });
+  const legs: Leg[] = [leg(la, 0, 1, 0.04), leg(lb, 0.5, -1, 0.04)];
+
+  const hp: V3 = [0, 0.27, 0.24];
+  const head = k.node("head", c.base, hp);
+  const HE: Ell = { c: [0, 0.35, 0.34], r: [0.14, 0.13, 0.13] };
+  const hs = (): Mesh[] => {
+    const hs: Mesh[] = [
+      blobM(s, HE.r, HE.c, P.skin, undefined, P.skinB, 14),
+      // tiny knight helmet: dome + band + a jewel at the front
+      blobM(s, [0.148, 0.085, 0.142], [0, 0.415, 0.325], P.helm, [-0.12, 0, 0], P.helmB, 14),
+      blobM(s, [0.152, 0.024, 0.146], [0, 0.4, 0.33], P.band, [-0.12, 0, 0], undefined, 14),
+      ballM(s, 0.02, [0, 0.415, 0.475], P.gem, undefined, 6),
+    ];
+    return hs;
+  };
+  const faces = buildHeads(k, head, hp, hs, {
+    head: HE,
+    eyeYaw: 0.4,
+    eyePitch: -0.02,
+    eyeW: 0.033,
+    eyeH: 0.044,
+    cheekYaw: 0.7,
+    cheekPitch: -0.28,
+    cheekR: 0.03,
+    mouth: { pitch: -0.36, w: 0.024, h: 0.013, style: "smile" },
+  }, { outline: 0.02 });
+  // springy plume on top of the helmet
+  const pp: V3 = [0, 0.49, 0.3];
+  const plN = k.node("plume", head, pp);
+  k.part("plumeMesh", plN, pp, [
+    ballM(s, 0.042, [0, 0.515, 0.31], P.plume, undefined, 8),
+    ballM(s, 0.048, [0, 0.555, 0.26], P.plume2, undefined, 8),
+    ballM(s, 0.042, [0, 0.565, 0.2], P.plume, undefined, 8),
+    ballM(s, 0.034, [0, 0.545, 0.15], P.plume2, undefined, 8),
+  ], { outline: 0.016 });
+  const ears: Ear[] = [ear(plN, 0, 1.2, 0.3, 0.45)];
+  const rig: Partial<Rig> & { head: TransformNode; faces: Mesh[] } = {
+    head,
+    faces,
+    legs,
+    ears,
+    nodes: { plume: plN },
+    attackPose: (cr, u, p) => {
+      if (u < 0.38) {
+        // brace: tuck the head in and hunker down behind the shell
+        const a = sstep(0, 0.3, u);
+        p.hz = -0.085 * a;
+        p.hy = -0.03 * a;
+        p.y = -0.02 * a;
+        p.z = -0.03 * a;
+        p.pitch = 0.12 * a;
+        p.sq = 0.08 * a;
+        p.face = FACE.closed;
+      } else if (u < 0.58) {
+        // SHIELD BASH: bump forward shell-first
+        const a = sstep(0.38, 0.5, u);
+        p.hz = -0.085;
+        p.hy = -0.03;
+        p.z = lerp(-0.03, 0.17, a);
+        p.y = 0.03 * Math.sin(Math.PI * a);
+        p.pitch = lerp(0.12, 0.24, a);
+        p.sq = lerp(0.08, -0.08, a);
+        p.face = FACE.closed;
+      } else {
+        // pop back out, proud
+        const a = sstep(0.58, 1, u);
+        p.z = 0.17 * (1 - a);
+        p.pitch = 0.24 * (1 - a);
+        p.hz = -0.085 * (1 - sstep(0, 0.5, a)) + 0.02 * Math.sin(Math.PI * a);
+        p.hy = -0.03 * (1 - a);
+        p.sq = -0.08 * (1 - a) + 0.05 * Math.sin(Math.PI * a);
+        p.face = FACE.happy;
+      }
+      void cr;
+    },
+  };
+  if (c.rare) addSparkle(c, rig, [0.3, 0.62, 0.05]);
+  return finish(c, { gait: "shuffle", freq: 2.2, bob: 0.012, stride: 0.04, lift: 0.03, roll: 0.05, height: 0.6, radius: 0.32, look: 0.6, headLag: 0.01, sleepDrop: 0.02, sleepHeadPitch: 0.25, sleepHeadRoll: 0.1, sleepHeadDrop: 0.03, attackDur: 0.48 }, rig);
+}
+
 const BUILDERS: Record<SpeciesId, (c: Ctx) => Critter> = {
   redpanda: buildRedpanda,
   puffbun: buildPuffbun,
@@ -1501,14 +2254,21 @@ const BUILDERS: Record<SpeciesId, (c: Ctx) => Critter> = {
   glowbat: buildGlowbat,
   molly: buildMolly,
   mochi: buildMochi,
+  pony: (c) => buildEquine(c, false),
+  unicorn: (c) => buildEquine(c, true),
+  emberling: buildEmberling,
+  roarlet: buildRoarlet,
+  shellby: buildShellby,
 };
+/** outline width per species (big riders get a slightly heavier line so they read at a distance) */
+const OUTLINE: Partial<Record<SpeciesId, number>> = { pony: 0.024, unicorn: 0.024 };
 
 /**
  * Build a plush critter. Origin at feet centre, facing +Z.
  * variant 1 = rare alternate colourway (+ floating sparkle and a tiny accessory).
  */
 export function buildCritter(scene: Scene, species: SpeciesId, variant: 0 | 1 = 0): CritterModel {
-  const c = ctx(scene, species, variant);
+  const c = ctx(scene, species, variant, OUTLINE[species]);
   return BUILDERS[species](c);
 }
 

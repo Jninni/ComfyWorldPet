@@ -111,6 +111,15 @@ export const QUESTS: Record<string, QuestDef> = {
     color: "var(--lav)",
     stages: ["Pick 3 dye flowers (any colours!)", "Bring the flowers to Stitch"],
   },
+  thornwild: {
+    id: "thornwild",
+    name: "Heroes of the Thornwild",
+    giver: "hoot",
+    icon: "⚔️",
+    color: "var(--lav)",
+    stages: ["Enter the Thornwild (north-east of Whisper Meadow)", "Free the trapped guardians", "Calm the Gloom King", "Tell Professor Hoot"],
+    targets: { 1: 3 },
+  },
   haven: {
     id: "haven",
     name: "Critter Haven",
@@ -196,6 +205,14 @@ export class Story {
     if (what === "harvest" && this.stage("bakery") === 1) this.advance("bakery");
   }
 
+  onGuardianFreed() {
+    const q = this.g.state.quests.thornwild;
+    if (!q || q.done || q.stage !== 1) return;
+    q.progress = ["emberling", "roarlet", "shellby"].filter((s) => this.g.state.flags["freed_" + s]).length;
+    if (q.progress >= 3) this.advance("thornwild");
+    else this.g.refreshQuestUI(true);
+  }
+
   onCook(food: string) {
     if (food === "cookie" && this.active("bakery") && this.stage("bakery") === 3) this.advance("bakery");
   }
@@ -233,7 +250,7 @@ export class Story {
 
   /** Main quest tracker text, else first active side quest. */
   tracked(): { id: string; title: string; text: string; icon: string } | null {
-    const order = ["main", "bakery", "thief", "sewing", "tea", "bouquet", "yarn", "hide", "pebbles", "haven"];
+    const order = ["main", "thornwild", "bakery", "thief", "sewing", "tea", "bouquet", "yarn", "hide", "pebbles", "haven"];
     for (const id of order) {
       if (this.active(id)) return { id, title: QUESTS[id].name, text: this.objective(id), icon: QUESTS[id].icon };
     }
@@ -259,6 +276,15 @@ export class Story {
         return { cave: true };
       case 8:
         return { npc: "mayor" };
+    }
+    if (q("thornwild")) {
+      const t = this.stage("thornwild");
+      if (t === 0) return { spot: [24, 104] };
+      if (t === 1) {
+        const left = ["emberling", "roarlet", "shellby"].find((s) => !this.g.state.flags["freed_" + s]);
+        if (left) return { critter: "guardian_" + left };
+      }
+      if (t === 3) return { npc: "hoot" };
     }
     if (q("bakery")) {
       const b = this.stage("bakery");
@@ -288,7 +314,7 @@ export class Story {
       case "mayor":
         return m === 0 || m === 8 || (this.done("bouquet") === false && this.active("bouquet") && this.stage("bouquet") === 1 && false);
       case "hoot":
-        return m === 1 || m === 3 || m === 6;
+        return m === 1 || m === 3 || m === 6 || (this.done("main") && !this.g.state.quests.thornwild) || (this.active("thornwild") && this.stage("thornwild") === 3);
       case "bramble":
         return m === 4 || (m >= 5 && !this.g.state.quests.haven) || (this.active("haven") && this.stage("haven") === 1);
       case "granny":
@@ -400,6 +426,28 @@ export class Story {
           this.advance("main");
         } else if (m === 7) {
           await say([{ ...W, text: "The Crystal Cave is north-west of Whisper Meadow. Follow the little path past the flowers!" }]);
+        } else if (this.done("main") && !g.state.quests.thornwild) {
+          await say([
+            { ...W, text: "Hoo... I have worrying news. North-east of Whisper Meadow lies the *Thornwild*." },
+            { ...W, text: "Grumpy *Gloomies* have taken over, and three brave *guardian critters* are trapped in gloom bubbles!" },
+            { ...W, text: "You'll need this: a *Sparkle Wand*! Bonk Gloomies and they poof into sparkles. Press Ⓧ, F or ⚔️ to swing it." },
+          ]);
+          g.give("wand", 1);
+          await say([
+            { ...W, text: "You have *5 hearts*. If they run out, you'll rest at the last *campfire* — no harm done! Eating food heals you too." },
+            { ...W, text: "Free the guardians, befriend them, and calm the *Gloom King*. Guardian critters fight by your side!" },
+          ]);
+          this.start("thornwild");
+          g.refreshThornGate();
+        } else if (this.active("thornwild") && this.stage("thornwild") === 3) {
+          await say([
+            { ...W, text: "You calmed the Gloom King?! Hoo-hoo-HOORAY! You're a true hero of Cozy Hollow!" },
+            { ...W, text: "And... I've heard whispers of a shy *Moonbeam Unicorn* in a glade of Whisper Meadow. It only appears to heroes!" },
+          ]);
+          this.complete("thornwild");
+          g.refreshUnicorn();
+        } else if (this.active("thornwild")) {
+          await say([{ ...W, text: "The Thornwild gate is north-east of Whisper Meadow. Be brave — and remember, campfires are safe spots!" }]);
         } else {
           const seen = g.state.seen.length;
           await say([{ ...W, text: `Your journal has ${seen} of ${SPECIES_IDS.length} critters. ${seen >= SPECIES_IDS.length ? "Every single one! Magnificent!" : "Keep exploring — each zone has its own critters!"}` }]);

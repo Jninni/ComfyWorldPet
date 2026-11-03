@@ -88,7 +88,7 @@ export class Overworld {
   private terrain!: TerrainResult;
   private chunks = new Map<string, PropBatches>();
   private exteriors: ExteriorDef[] = [];
-  private updaters: ((dt: number, t: number) => void)[] = [];
+  updaters: ((dt: number, t: number) => void)[] = [];
   private nodeTemplates = new Map<NodeKind, { base: Mesh; star: Mesh }>();
   private occupied: { x: number; z: number; r: number }[] = [];
 
@@ -444,7 +444,7 @@ export class Overworld {
     }
     // wild critters
     const table: Record<string, SpeciesId[]> = {
-      meadow: ["puffbun", "puffbun", "chirpy", "puffbun", "chirpy", "puffbun", "chirpy"],
+      meadow: ["puffbun", "puffbun", "chirpy", "pony", "puffbun", "chirpy", "puffbun", "chirpy", "pony"],
       woods: ["fennix", "hoglet", "shroomy", "redpanda", "fennix", "hoglet", "shroomy", "redpanda", "fennix"],
       pond: ["ribbit", "duckling", "ribbit", "duckling", "ribbit", "duckling"],
     };

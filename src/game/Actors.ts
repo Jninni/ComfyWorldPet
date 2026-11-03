@@ -43,7 +43,27 @@ export class PlayerCtl {
   /** ground height under the player (camera uses this so jumps don't bob the view) */
   groundY = 0;
   onLand: ((p: Vector3, hard: boolean) => void) | null = null;
-  onJump: (() => void) | null = null;
+  onJump: ((second: boolean) => void) | null = null;
+  // ---- critter perks / riding (set by the game every frame) ----
+  /** jump height multiplier (Puffbun, mounts) */
+  jumpMul = 1;
+  /** 2 = double jump (Chirpy, unicorn) */
+  maxJumps = 1;
+  /** hold jump while falling to float (Glowbat) */
+  canGlide = false;
+  /** is the jump button held this frame */
+  jumpHeld = false;
+  /** riding: replaces walk/run/sprint top speeds */
+  mountSpeed = 0;
+  /** riding: the player sits this high above the ground */
+  rideOffset = 0;
+  private jumpsUsed = 0;
+  gliding = false;
+
+  /** actual ground speed in m/s */
+  get moveSpeed() {
+    return Math.hypot(this.vx, this.vz);
+  }
 
   get airborne() {
     return this.jumpY > 0.001 || this.vy > 0;
@@ -51,11 +71,14 @@ export class PlayerCtl {
 
   /** hop! (ignored while already in the air) */
   jump() {
-    if (this.airborne) return false;
-    this.vy = 6.4;
+    const second = this.airborne;
+    if (second && this.jumpsUsed >= this.maxJumps) return false;
+    this.jumpsUsed = second ? this.jumpsUsed + 1 : 1;
+    // height ∝ v², so scale launch speed by √(height multiplier)
+    this.vy = (second ? 5.6 : 6.4) * Math.sqrt(this.jumpMul);
     this.squashV = 9;
-    audio.sfx("jump");
-    this.onJump?.();
+    audio.sfx("jump", { pitch: second ? 1.25 : 1 });
+    this.onJump?.(second);
     return true;
   }
   /** breadcrumb trail for followers */
@@ -82,6 +105,7 @@ export class PlayerCtl {
 
   sync() {
     this.model.root.position.copyFrom(this.pos);
+    this.model.root.position.y += this.rideOffset;
     this.model.root.rotation.y = this.rot;
   }
 
@@ -93,7 +117,13 @@ export class PlayerCtl {
       rz = -fx;
     const mag = Math.min(1, Math.hypot(mx, my));
     // walk → run (full stick) → sprint (hold the sprint button)
-    const base = this.sprinting && mag > 0.2 ? 9.6 : mag > 0.85 ? 6.8 : 4.6;
+    const base = this.mountSpeed
+      ? (this.sprinting && mag > 0.2 ? 1.15 : 1) * (mag > 0.6 ? this.mountSpeed : this.mountSpeed * 0.55)
+      : this.sprinting && mag > 0.2
+        ? 9.6
+        : mag > 0.85
+          ? 6.8
+          : 4.6;
     const maxSpeed = base * this.speedMul * (this.airborne ? 0.92 : 1);
     const tx = (rx * mx + fx * my) * maxSpeed;
     const tz = (rz * mx + fz * my) * maxSpeed;
@@ -125,13 +155,17 @@ export class PlayerCtl {
     this.groundY += (gy - this.groundY) * Math.min(1, 20 * dt);
     // jump arc: snappy up, floaty top, quicker fall (feels good for little hands)
     if (this.airborne) {
-      const g = this.vy > 0 ? 17 : 24;
+      this.gliding = this.canGlide && this.jumpHeld && this.vy < 0;
+      const g = this.vy > 0 ? 17 : this.gliding ? 6 : 24;
       this.vy -= g * dt;
+      if (this.gliding) this.vy = Math.max(this.vy, -1.6);
       this.jumpY += this.vy * dt;
       if (this.jumpY <= 0) {
         const hard = this.vy < -6;
         this.jumpY = 0;
         this.vy = 0;
+        this.jumpsUsed = 0;
+        this.gliding = false;
         this.squashV = -10;
         audio.sfx("step", { volume: 0.8, pitch: 0.8 });
         this.onLand?.(this.pos, hard);
@@ -146,7 +180,8 @@ export class PlayerCtl {
     this.model.root.scaling.set(1 / Math.sqrt(sy), sy, 1 / Math.sqrt(sy));
     this.sync();
     if (this.celebrate > 0) this.celebrate -= dt;
-    this.model.update(dt, { speed: this.speed, celebrate: this.celebrate > 0 });
+    // when riding, the player sits still on the mount (the mount does the running)
+    this.model.update(dt, { speed: this.rideOffset ? 0 : this.speed, celebrate: this.celebrate > 0 });
   }
 
   /** idle-animate without moving (dialogue, menus) */

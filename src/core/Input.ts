@@ -8,7 +8,7 @@
  * y = journal, start = pause, lb/rb = shoulder, up/down/left/right = d-pad
  * (also synthesised from stick/WASD for menu navigation).
  */
-export type Btn = "a" | "b" | "x" | "y" | "start" | "lb" | "rb" | "up" | "down" | "left" | "right" | "sprint";
+export type Btn = "a" | "b" | "x" | "y" | "start" | "lb" | "rb" | "up" | "down" | "left" | "right" | "sprint" | "ride" | "attack";
 export type Device = "keyboard" | "gamepad" | "touch";
 
 const KEYMAP: Record<string, Btn> = {
@@ -27,6 +27,8 @@ const KEYMAP: Record<string, Btn> = {
   KeyM: "start",
   BracketLeft: "lb",
   BracketRight: "rb",
+  KeyR: "ride",
+  KeyF: "attack",
   ShiftLeft: "sprint",
   ShiftRight: "sprint",
   Comma: "lb",

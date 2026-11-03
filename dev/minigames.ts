@@ -20,6 +20,11 @@ const COLORS: Record<SpeciesId, string> = {
   glowbat: "#c7b3f0",
   molly: "#c9b2a6",
   mochi: "#e9e4f5",
+  pony: "#f6d7b8",
+  unicorn: "#f3ecff",
+  emberling: "#ffb38a",
+  roarlet: "#ffd58a",
+  shellby: "#a9dcb8",
 };
 const cap = (s: string) => s[0].toUpperCase() + s.slice(1);
 

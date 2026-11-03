@@ -122,7 +122,8 @@ export function openCookMenu(g: Game): Promise<FoodId | null> {
                 m.back.remove();
                 for (const [k, n] of Object.entries(r.cost)) g.take(k, n ?? 0);
                 await craftAction(g, { title: `Baking ${f.name}`, verb: "Stir!", emoji: "🥣", taps: 6, color: "var(--butter)", finish: "Into the oven… ding! ✨" });
-                const makes = f.makes ?? 1;
+                const makes = (f.makes ?? 1) + (g.partyHas("mochi") ? (g.bestFriendship("mochi") >= 5 ? 2 : 1) : 0);
+                if (g.partyHas("mochi")) g.ui.toast("Mochi helped! Extra treats ✨", "🐱", "var(--butter)");
                 g.give(r.id, makes, true);
                 audio.jingle("fanfare");
                 g.fx.confetti(g.player.pos.add(new Vector3(0, 2, 0)), 24);
@@ -253,7 +254,7 @@ export function openSewingMenu(g: Game): Promise<void> {
       g.player.model.setLook?.(p);
     };
     const cost = (): Cost & Record<string, number> => {
-      const c: Record<string, number> = { petal: PATTERNS[kind].petals };
+      const c: Record<string, number> = { petal: Math.max(1, PATTERNS[kind].petals - (g.partyHas("duckling") ? 1 : 0)) };
       const dyes = [main, PATTERNS[kind].slot === "outfit" ? accent : "cream"].filter((d) => d !== "cream") as DyeId[];
       for (const d of dyes) c["dye_" + d] = (c["dye_" + d] ?? 0) + 1;
       return c;

@@ -3,7 +3,7 @@ import { h, Nav, portrait } from "./dom";
 import { audio } from "../audio/Audio";
 import { input } from "../core/Input";
 import { hasSave, clearSave, PARTY_MAX } from "../core/State";
-import { SPECIES, SPECIES_IDS, ZONE_INFO } from "../data/species";
+import { SPECIES, SPECIES_IDS, ZONE_INFO, ROLES } from "../data/species";
 import { RESOURCES, KEY_ITEMS, BUILDABLES, type BuildableId, type ResourceId } from "../data/items";
 import { QUESTS } from "../game/Story";
 import { FOODS, INGREDIENTS, DYES, PATTERNS, type FoodId, type IngredientId, type DyeId } from "../data/crafting";
@@ -303,7 +303,7 @@ function renderTab(g: Game, tab: Tab, rerender: () => void): HTMLElement {
                     h("div", { style: { fontSize: "22px", fontWeight: "600" } }, info.name),
                     h("div", null, info.desc),
                     h("div", { style: { marginTop: "6px", fontSize: "15px" } }, `💕 Likes: ${info.likes}`),
-                    h("div", { style: { fontSize: "15px" } }, `✨ Talent: ${info.talent}`),
+                    h("div", { style: { fontSize: "15px" } }, `${ROLES[info.role].icon} ${ROLES[info.role].name}: ${info.talent}`),
                     h("div", { style: { fontSize: "15px" } }, `📍 ${ZONE_INFO[info.zone].name}`),
                   ),
                 ),
@@ -313,6 +313,7 @@ function renderTab(g: Game, tab: Tab, rerender: () => void): HTMLElement {
           h(".portrait", null, portrait(id, info.color, 128)),
           h(".nm", null, seen ? info.name : "???"),
           h(".sub", null, seen ? ZONE_INFO[info.zone].name : "Not seen yet"),
+          seen ? h(".role-badge", { "--c": ROLES[info.role].color }, `${ROLES[info.role].icon} ${ROLES[info.role].name}`) : null,
           owned ? h(".badge", null, `♥ ${owned}`) : null,
         );
         grid.append(card);
@@ -323,6 +324,13 @@ function renderTab(g: Game, tab: Tab, rerender: () => void): HTMLElement {
       const wrap = h("div");
       const inParty = s.critters.filter((c) => c.inParty).length;
       wrap.append(h("p", { style: { textAlign: "center", margin: "0 0 10px", fontWeight: "600" } }, `Party ${inParty} / ${PARTY_MAX} — tap a friend to bring them along or send them to Critter Haven`));
+      wrap.append(
+        h(
+          ".row",
+          { style: { justifyContent: "center", marginBottom: "10px", fontSize: "14px" } },
+          ...Object.values(ROLES).map((r) => h(".role-badge", { "--c": r.color, title: r.desc }, `${r.icon} ${r.name}: ${r.desc}`)),
+        ),
+      );
       const grid = h(".grid");
       if (!s.critters.length) grid.append(h("p", null, "No critter friends yet!"));
       for (const c of s.critters) {
@@ -346,6 +354,7 @@ function renderTab(g: Game, tab: Tab, rerender: () => void): HTMLElement {
             h(".portrait", null, portrait(c.species, info.color, 128)),
             h(".nm", null, c.name),
             h(".sub", null, c.inParty ? "🐾 In party" : "🏡 In Haven"),
+            h(".role-badge", { "--c": ROLES[info.role].color, title: info.talent }, `${ROLES[info.role].icon} ${ROLES[info.role].name}`),
             h(".hearts", { title: "Friendship — share treats to fill it!" }, "💗".repeat(Math.min(5, c.friendship ?? 1)) + "🤍".repeat(Math.max(0, 5 - (c.friendship ?? 1)))),
             c.variant ? h(".badge", null, "✨ rare") : null,
           ),
@@ -555,7 +564,7 @@ function renderTab(g: Game, tab: Tab, rerender: () => void): HTMLElement {
             ),
           ),
         ),
-        h("p", { style: { fontSize: "15px", color: "var(--ink-soft)" } }, "Controls: move with the stick / WASD / joystick. Ⓐ / Space = talk & interact. Ⓧ / Q = bag. Pinch or scroll to zoom."),
+        h("p", { style: { fontSize: "15px", color: "var(--ink-soft)" } }, "Controls: stick / WASD / joystick to move · Ⓐ / Space talk or jump · hold Ⓑ / Shift to sprint · Ⓨ / R ride · Ⓧ / F wand (Thornwild) · Ⓧ / Q bag · right stick, LB/RB or drag to rotate · pinch or scroll to zoom."),
         h(
           ".row",
           { style: { justifyContent: "center", marginTop: "8px" } },

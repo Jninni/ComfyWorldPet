@@ -12,6 +12,15 @@ import { RESOURCES, KEY_ITEMS, BUILDABLES, type ResourceId, type BuildableId } f
 import { PlayerCtl, Follower, WildCritter, Npc, type GroundFn } from "./Actors";
 import { Story, QUESTS } from "./Story";
 import { Life } from "./Life";
+import { Combat } from "./Combat";
+import { buildThornwild, buildThornGate, type ThornwildDef } from "../world/thornwild";
+
+/** Rider-class critters: how they ride. */
+const MOUNTS: Record<string, { scale: number; speed: number; jump: number; double?: boolean; hint: string }> = {
+  ribbit: { scale: 2.4, speed: 8.5, jump: 1.9, hint: "Giant froggy hops!" },
+  pony: { scale: 1, speed: 11, jump: 1.15, hint: "Gallop!" },
+  unicorn: { scale: 1, speed: 11.5, jump: 1.3, double: true, hint: "Double jump & rainbow sparkles!" },
+};
 import { openCookMenu, openSewingMenu, openOrdersMenu, chooseSnack } from "../ui/Crafting";
 import { Overworld, type ResourceNode, type Pickup, type NodeKind } from "./World";
 import { INGREDIENTS, FOODS, DYES, type IngredientId, type FoodId, type DyeId, type BuffId } from "../data/crafting";
@@ -24,6 +33,7 @@ import { NPC_INFO } from "../entities/characterModels";
 import { zoneAt, LOC, heightAt } from "../world/layout";
 import { openPauseMenu, openBuildMenu, showTitle, showCreator } from "../ui/Menus";
 import { h, portrait } from "../ui/dom";
+import { Batch, ball } from "../render/Shapes";
 
 export interface Interact {
   id: string;
@@ -62,6 +72,10 @@ export class Game {
   state: GameState = newState();
   story: Story;
   life!: Life;
+  combat!: Combat;
+  private thornGate: ReturnType<typeof buildThornGate> | null = null;
+  private bubbles: { w: WildCritter; mesh: Mesh; hp: number }[] = [];
+  private bossStarted = false;
   world!: Overworld;
   locations = new Map<string, Location>();
   current!: Location;
@@ -86,6 +100,9 @@ export class Game {
   private haven: WildCritter[] = [];
   private saveTimer = 0;
   private enteredAt = 0;
+  /** the party critter you're riding */
+  riding: { f: Follower; scale: number; seat: number } | null = null;
+  private trailT = 0;
   /** tests: skip minigames with an automatic win */
   debugAutoWin = false;
   private guide = h(".guide-arrow", null, h(".ga-in", null, "➜"));
@@ -191,9 +208,10 @@ export class Game {
       this.npcs.set(id, n);
     }
     this.player = new PlayerCtl(scene, this.state.look as PlayerLook);
-    this.player.onJump = () => {
-      this.fx.puff(this.player.pos.add(new Vector3(0, 0.1, 0)), 4, "#f6f0e2");
-      this.followers.forEach((f, i) => (f.hopT = -0.12 - i * 0.12));
+    this.player.onJump = (second) => {
+      if (second) this.fx.sparkles(this.player.pos.add(new Vector3(0, 0.4, 0)), 10, ["#bfe0f6", "#ffffff"]);
+      else this.fx.puff(this.player.pos.add(new Vector3(0, 0.1, 0)), 4, "#f6f0e2");
+      if (!second) this.followers.forEach((f, i) => f !== this.riding?.f && (f.hopT = -0.12 - i * 0.12));
     };
     this.player.onLand = (p, hard) => {
       if (this.zone !== "interior") this.fx.puff(p.add(new Vector3(0, 0.08, 0)), hard ? 8 : 5, "#f6f0e2");
@@ -207,6 +225,9 @@ export class Game {
     this.life = new Life(this);
     this.life.initGarden();
     this.life.initCrumbs();
+    this.combat = new Combat(this);
+    this.combat.onBossDefeated = () => this.onBossDefeated();
+    this.initThornGate();
     progress(1, "Ready!");
     this.stage.engine.runRenderLoop(() => this.frame());
     (window as unknown as { __game: Game }).__game = this;
@@ -290,6 +311,8 @@ export class Game {
     this.refreshPickups();
     this.life.refreshCrumbs();
     this.life.ensureStarterWardrobe();
+    this.refreshThornGate();
+    this.refreshUnicorn();
     this.player.model.setLook?.(this.state.look as PlayerLook);
     this.ui.setResources(this.state.resources);
     this.refreshNpcMarkers();
@@ -304,7 +327,7 @@ export class Game {
     let L = this.locations.get(id);
     if (L) return L;
     const origin = interiorOrigin(id);
-    const def = id === "cave" ? buildCave(this.scene, origin) : buildInterior(this.scene, id as BuildingId, origin);
+    const def = id === "cave" ? buildCave(this.scene, origin) : id === "thornwild" ? buildThornwild(this.scene, origin) : buildInterior(this.scene, id as BuildingId, origin);
     const col = new CollisionWorld(4);
     col.add(def.colliders);
     col.bounds = def.bounds;
@@ -317,7 +340,7 @@ export class Game {
       interacts: [],
       frame: def.camera,
       lighting: def.lighting,
-      music: id === "cave" ? "cave" : "interior",
+      music: id === "cave" || id === "thornwild" ? "cave" : "interior",
       bounds: def.bounds,
       def,
       update: def.update,
@@ -419,6 +442,7 @@ export class Game {
           run: () => this.openBuildMenu(),
         });
     }
+    if (L.id === "thornwild") this.decorateThornwild(L, def);
     if (L.id === "cave") {
       const t = spot("treasure");
       if (t) {
@@ -463,6 +487,8 @@ export class Game {
   }
 
   async goTo(id: string, spawn?: { x: number; z: number; rot: number }, fade = true) {
+    const keepRiding = !!this.riding;
+    if (this.riding) this.toggleRide();
     this.mode = "busy";
     if (fade) await this.ui.fade(true);
     const prev = this.current;
@@ -476,7 +502,14 @@ export class Game {
     }
     this.haven.forEach((w) => w.model.root.setEnabled(id === "overworld" && w.state !== "hidden"));
     for (const n of this.npcs.values()) n.model.root.setEnabled(n.location === id);
-    this.stage.setLighting(L.lighting);
+    const cleansed = id === "thornwild" && !!this.state.flags.thornwildCleansed;
+    this.stage.setLighting(cleansed && L.def?.cleansedLighting ? L.def.cleansedLighting : L.lighting);
+    if (L.def?.cleanse) L.def.cleanse(cleansed ? 1 : 0);
+    if (L.def?.dangerous) {
+      this.combat.begin(L);
+      this.bossStarted = false;
+      (L.def as ThornwildDef).setBossGate?.(false);
+    } else if (this.combat?.active) this.combat.end();
     let p: Vector3;
     let rot: number;
     if (spawn) {
@@ -503,9 +536,14 @@ export class Game {
     }
     this.state.location = { where: id, x: p.x, z: p.z, rot };
     this.enteredAt = this.time;
+    if (keepRiding && this.canRideHere()) this.toggleRide();
     this.refreshNpcMarkers();
     if (fade) await this.ui.fade(false);
     if (L.id === "cave") this.ui.showBanner(ZONE_INFO.cave.name, ZONE_INFO.cave.subtitle);
+    else if (L.id === "thornwild") {
+      this.ui.showBanner(ZONE_INFO.thornwild.name, this.state.flags.thornwildCleansed ? "Sunny and safe again!" : ZONE_INFO.thornwild.subtitle);
+      if (this.story.active("thornwild") && this.story.stage("thornwild") === 0) this.story.advance("thornwild");
+    }
     else if (L.def) {
       const info = BUILDING_INFO[L.id as BuildingId];
       if (info) this.ui.showBanner(info.name, "");
@@ -553,16 +591,21 @@ export class Game {
       if (playing) {
         // sprint: hold Ⓑ / a trigger / Shift / the 👟 touch button
         this.player.sprinting = input.down("b") || input.down("sprint");
+        this.player.jumpHeld = input.down("a");
+        this.applyPerks();
         this.player.update(dt, input.move.x, input.move.y, this.camAlpha, L.collision, L.ground);
+        this.updateMount(dt);
         this.state.playTime += dt;
       } else this.player.idle(dt, false);
     }
-    // followers walk the breadcrumb trail
+    // followers walk the breadcrumb trail (the critter you're riding is busy carrying you)
     const trail = this.player.trail;
-    this.followers.forEach((f, i) => {
+    const walkers = this.followers.filter((f) => f !== this.riding?.f);
+    walkers.forEach((f, i) => {
       const idx = Math.min(trail.length - 1, 4 + i * 4);
-      f.update(dt, trail[idx] ?? this.player.pos, L.ground, this.player.speed * 6.8 * this.player.speedMul * (this.player.sprinting ? 1.45 : 1));
+      f.update(dt, trail[idx] ?? this.player.pos, L.ground, this.player.moveSpeed * 1.05);
     });
+    if (this.riding && !playing) this.updateMount(dt);
     // wild critters
     const pp = this.player.pos;
     for (const w of L.wild) {
@@ -582,6 +625,10 @@ export class Game {
     for (const n of this.npcs.values()) if (n.location === L.id) n.update(dt, pp);
     L.update?.(dt, this.time);
     if (this.mode !== "title") this.life.update(dt);
+    if (this.combat?.active) {
+      this.combat.update(dt, playing);
+      this.updateThornwild(dt);
+    }
     this.builtThings.forEach((b) => b?.update?.(dt, this.time));
 
     // zone changes
@@ -600,9 +647,10 @@ export class Game {
       this.nearest = null;
       this.ui.showPrompt(null, "");
     }
-    if (playing && input.pressed("x")) this.openMenu();
+    if (playing && input.pressed("x") && !this.combat?.active) this.openMenu();
     if (playing && input.pressed("start")) this.openMenu();
-    if (playing && input.pressed("y")) openPauseMenu(this, "critters");
+    if (playing && (input.pressed("ride") || (input.pressed("y") && this.riders().length))) this.toggleRide();
+    else if (playing && input.pressed("y")) openPauseMenu(this, "critters");
 
     if (playing) {
       // rotate: right stick, LB/RB, [ ] or , . keys (drag / two-finger handled in setupPinch)
@@ -933,6 +981,11 @@ export class Game {
     this.camShot = { target: Vector3.Lerp(this.player.pos, w.pos, 0.6).add(new Vector3(0, 0.8, 0)), radius: this.current.def ? this.current.frame!.radius * 0.7 : 12 };
     audio.voice(w.species, "curious");
     try {
+      const bubble = this.bubbles.find((b) => b.w === w);
+      if (bubble) {
+        await this.ui.say([{ text: `This ${info.name} is trapped in a gloomy bubble! Bonk the bubble with your *Sparkle Wand* (Ⓧ / F / ⚔️) to set it free!` }]);
+        return;
+      }
       if (!this.state.keyItems.charm) {
         await this.ui.say([{ text: `It's a ${info.name}! It looks at you curiously... You'll need a *Friendship Charm* to make friends.` }]);
         return;
@@ -961,7 +1014,7 @@ export class Game {
       }
       w.state = "idle";
       const cozy = this.life.buffActive("cozy");
-      let diff = info.difficulty - (usedCookie ? 1 : 0) - (this.partyHas("chirpy") ? 1 : 0) - (cozy ? 1 : 0);
+      let diff = info.difficulty - (usedCookie ? 1 : 0) - (cozy ? 1 : 0);
       if (cozy) this.life.useCozy();
       if (w.species === "mochi" || w.id === "thief") diff = 1;
       diff = Math.max(1, Math.min(3, diff));
@@ -1032,16 +1085,330 @@ export class Game {
     fresh.model.root.setEnabled(L === this.current);
   }
 
+  /* ================================================================== */
+  /* The Thornwild                                                       */
+  /* ================================================================== */
+
+  private initThornGate() {
+    const p = LOC.thornGate;
+    const gate = buildThornGate(this.scene, new Vector3(p.x, heightAt(p.x, p.z), p.z), 0);
+    gate.root.parent = this.world.root;
+    this.world.collision.add(gate.colliders);
+    this.thornGate = gate;
+    this.world.updaters.push((dt, t) => gate.update(dt, t));
+    this.world.interacts.push({
+      id: "thorngate",
+      pos: gate.entrance,
+      r: 2.6,
+      h: 3,
+      label: () => (this.thornwildOpen() ? "Enter the Thornwild" : "Thorny gate"),
+      run: async () => {
+        if (!this.thornwildOpen()) {
+          await this.ui.say([
+            {
+              text: this.story.done("main")
+                ? "Prickly brambles block the way, and grumpy growls echo inside... Maybe *Professor Hoot* knows something."
+                : "Prickly brambles block the way, and grumpy growls echo inside. It feels too dangerous for now — maybe after your big adventure!",
+            },
+          ]);
+          return;
+        }
+        audio.sfx("whoosh");
+        await this.goTo("thornwild");
+      },
+    });
+    this.refreshThornGate();
+  }
+
+  /** a shy Moonbeam Unicorn appears in a meadow glade once the Thornwild is safe */
+  refreshUnicorn() {
+    const want = this.story.done("thornwild") && !this.state.critters.some((c) => c.species === "unicorn");
+    const has = this.world.wild.find((w) => w.id === "unicorn_glade");
+    if (want && !has) {
+      const g = LOC.unicornGlade;
+      const w = new WildCritter(this.scene, "unicorn_glade", "unicorn", 0, new Vector3(g.x, heightAt(g.x, g.z), g.z), 3);
+      this.world.wild.push(w);
+      w.model.root.setEnabled(this.current?.id === "overworld");
+    }
+  }
+
+  thornwildOpen() {
+    return !!this.state.quests.thornwild;
+  }
+
+  refreshThornGate() {
+    this.thornGate?.setOpen(this.thornwildOpen());
+  }
+
+  private decorateThornwild(L: Location, def: InteriorDef) {
+    const spot = (k: string) => def.spots[k];
+    // campfires = checkpoints (walk near to rest: hearts refill)
+    for (let i = 0; i < 3; i++) {
+      const c = spot("checkpoint_" + i);
+      if (c)
+        L.interacts.push({
+          id: "campfire_" + i,
+          pos: c,
+          r: 2.2,
+          label: "Rest by the fire",
+          run: async () => {
+            this.combat.setCheckpoint(c);
+            this.combat.heal(5);
+            audio.sfx("chime");
+            this.save();
+            this.ui.toast("Checkpoint! Hearts refilled.", "🔥", "var(--butter)");
+          },
+        });
+    }
+    const camp = spot("camp");
+    if (camp)
+      L.interacts.push({
+        id: "camp",
+        pos: camp,
+        r: 2.2,
+        label: "Rest",
+        run: () => {
+          this.combat.heal(5);
+          this.ui.toast("Cozy camp — hearts refilled!", "🔥", "var(--butter)");
+        },
+      });
+    for (let i = 0; i < 6; i++) {
+      const p = spot("res_" + i);
+      if (p) this.world.addResourceNode(L, i % 2 ? "berry" : "crystal", p);
+    }
+    // trapped guardians
+    const guardians = ["emberling", "roarlet", "shellby"] as const;
+    guardians.forEach((sp, i) => {
+      const p = spot("guardian_" + i);
+      if (!p) return;
+      const w = new WildCritter(this.scene, "guardian_" + sp, sp, 0, p.clone(), 0.01);
+      w.state = "idle";
+      L.wild.push(w);
+      if (this.state.critters.some((c) => c.species === sp) || this.state.flags["freed_" + sp]) {
+        if (this.state.critters.some((c) => c.species === sp)) w.hide();
+        return;
+      }
+      const b = new Batch(this.scene, "gloomBubble");
+      b.add(ball(this.scene, w.model.height * 0.85 + 0.35, { color: "#6a4f9a" }, 16));
+      const mesh = b.build({ outline: 0.03, emissive: "#2a1a4a", castShadow: false, alpha: 0.55 })!;
+      mesh.material!.alpha = 0.55;
+      mesh.position.set(p.x, p.y + w.model.height * 0.5, p.z);
+      mesh.parent = def.root;
+      mesh.position.subtractInPlace(def.root.position);
+      this.bubbles.push({ w, mesh, hp: 3 });
+    });
+    // the treasure appears once the Gloom King is calmed
+    const t = spot("treasure");
+    if (t) {
+      const chest = this.world.makeChest(t);
+      L.interacts.push({
+        id: "thorn_chest",
+        pos: t,
+        r: 2.2,
+        label: () => (this.state.taken.includes("thornChest") ? "Empty chest" : "Open"),
+        enabled: () => !!this.state.flags.thornwildCleansed,
+        run: async () => {
+          if (this.state.taken.includes("thornChest")) return;
+          this.state.taken.push("thornChest");
+          this.world.openChest(chest);
+          audio.jingle("fanfare");
+          this.give("crystal", 8);
+          this.give("cookie", 5);
+          this.unlockHat("crown");
+          await this.ui.say([{ text: "✨ Treasure! Sparkly crystals, a big bag of Critter Cookies and a shiny *Hero's Crown*!" }]);
+        },
+      });
+    }
+  }
+
+  /** bonk gloom bubbles near a point (called by the wand swing) */
+  bonkBubbles(at: Vector3) {
+    for (const b of this.bubbles) {
+      if (Vector3.Distance(at, b.w.pos) > 2.6) continue;
+      b.hp--;
+      audio.sfx("bubble", { pitch: 0.8 + b.hp * 0.15 });
+      b.mesh.scaling.setAll(0.85 + b.hp * 0.05);
+      this.fx.sparkles(b.mesh.getAbsolutePosition(), 8, ["#d9c6f5", "#ffffff"]);
+      if (b.hp <= 0) {
+        b.mesh.dispose();
+        this.bubbles = this.bubbles.filter((x) => x !== b);
+        this.state.flags["freed_" + b.w.species] = true;
+        b.w.model.emote("happy");
+        audio.voice(b.w.species, "happy");
+        this.fx.hearts(b.w.pos.add(new Vector3(0, 1, 0)), 10);
+        this.ui.toast(`You freed ${SPECIES[b.w.species].name}! Now make friends!`, "⚔️", "var(--lav)");
+        this.story.onGuardianFreed();
+        this.save();
+      }
+    }
+  }
+
+  private updateThornwild(dt: number) {
+    const L = this.current;
+    const def = L.def as ThornwildDef | undefined;
+    if (!def || L.id !== "thornwild") return;
+    const pp = this.player.pos;
+    // walking past a campfire makes it your checkpoint
+    for (let i = 0; i < 3; i++) {
+      const c = def.spots["checkpoint_" + i];
+      if (c && Vector3.DistanceSquared(c, pp) < 9 && this.combat.setCheckpoint(c)) this.ui.toast("Checkpoint! Hearts refilled.", "🔥", "var(--butter)");
+    }
+    // heart flowers
+    for (let i = 0; i < 4; i++) {
+      const hp = def.spots["heart_" + i];
+      const key = "heartflower_" + i;
+      if (hp && !this.state.flags[key] && Vector3.DistanceSquared(hp, pp) < 2.2 && this.combat.hearts < this.combat.maxHearts) {
+        this.state.flags[key] = true;
+        this.combat.heal(2);
+        audio.sfx("heart");
+        setTimeout(() => (this.state.flags[key] = false), 60000);
+      }
+    }
+    // walking into the boss arena starts the fight (once all guardians are freed, the King gets nervous)
+    const boss = def.spots.boss;
+    if (!this.bossStarted && boss && !this.state.flags.thornwildCleansed && Vector3.Distance(boss, pp) < 10) {
+      this.bossStarted = true;
+      def.setBossGate?.(true);
+      this.combat.startBoss();
+    }
+    void dt;
+  }
+
+  private async onBossDefeated() {
+    const L = this.current;
+    const def = L.def as ThornwildDef;
+    this.state.flags.thornwildCleansed = true;
+    def.setBossGate?.(false);
+    this.player.celebrate = 2;
+    audio.jingle("victory");
+    // cleanse the whole area over a few seconds
+    const t0 = performance.now();
+    const step = () => {
+      const f = Math.min(1, (performance.now() - t0) / 3000);
+      def.cleanse?.(f);
+      if (f < 1) requestAnimationFrame(step);
+      else if (def.cleansedLighting) this.stage.setLighting(def.cleansedLighting);
+    };
+    step();
+    if (this.story.active("thornwild") && this.story.stage("thornwild") <= 2) this.story.advance("thornwild", 3);
+    this.save();
+    await wait(1800);
+    await this.ui.say([{ text: "🌈 The Gloom King gives a big sigh... and turns into a happy little cloud! The Thornwild is sunny and safe again!" }]);
+  }
+
+  /* ================================================================== */
+  /* Critter classes: perks & riding                                     */
+  /* ================================================================== */
+
+  riders() {
+    return this.followers.filter((f) => SPECIES[f.owned.species].role === "rider");
+  }
+
+  /** Booster perks from your party + the mount you're riding. */
+  private applyPerks() {
+    const p = this.player;
+    const best = (s: SpeciesId) => this.bestFriendship(s) >= 5;
+    let speed = this.life.buffActive("zoomies") ? 1.35 : 1;
+    if (this.partyHas("fennix")) speed *= best("fennix") ? 1.3 : 1.2;
+    let jump = this.partyHas("puffbun") ? (best("puffbun") ? 1.7 : 1.45) : 1;
+    let jumps = this.partyHas("chirpy") ? 2 : 1;
+    p.canGlide = this.partyHas("glowbat");
+    const r = this.riding;
+    if (r) {
+      const m = MOUNTS[r.f.owned.species] ?? MOUNTS.pony;
+      p.mountSpeed = m.speed;
+      jump *= m.jump;
+      if (m.double) jumps = 2;
+      p.rideOffset = r.seat;
+    } else {
+      p.mountSpeed = 0;
+      p.rideOffset = 0;
+    }
+    p.speedMul = speed;
+    p.jumpMul = jump;
+    p.maxJumps = jumps;
+  }
+
+  canRideHere() {
+    const f = this.current.frame;
+    return !this.current.def || !!f?.follow;
+  }
+
+  toggleRide() {
+    if (this.riding) {
+      const r = this.riding;
+      this.riding = null;
+      r.f.model.root.scaling.setAll(1);
+      const side = this.player.front(-1.2);
+      r.f.place(new Vector3(side.x + 1, this.player.groundY, side.z), this.player.rot);
+      this.player.rideOffset = 0;
+      this.player.sync();
+      audio.sfx("whoosh");
+      this.fx.puff(this.player.pos.add(new Vector3(0, 0.3, 0)), 8);
+      return;
+    }
+    const riders = this.riders();
+    if (!riders.length) {
+      this.ui.toast("Befriend a Rider critter (frog, pony or unicorn) to ride!", "🐴", "var(--pink)");
+      return;
+    }
+    if (!this.canRideHere()) {
+      this.ui.toast("No riding indoors!", "🏠", "var(--pink)");
+      return;
+    }
+    const f = riders[0];
+    const m = MOUNTS[f.owned.species] ?? MOUNTS.pony;
+    const seat = (f.model.seatY ?? f.model.height * 0.72) * m.scale;
+    this.riding = { f, scale: m.scale, seat };
+    audio.voice(f.owned.species, "happy");
+    audio.sfx("jump", { pitch: 1.2 });
+    this.fx.sparkles(this.player.pos.add(new Vector3(0, 1, 0)), 14);
+    this.ui.toast(`Riding ${f.owned.name}! ${m.hint}`, "🐴", "var(--pink)");
+    this.applyPerks();
+    this.updateMount(0);
+  }
+
+  private updateMount(dt: number) {
+    const r = this.riding;
+    if (!r) return;
+    const p = this.player;
+    const root = r.f.model.root;
+    r.f.pos.set(p.pos.x, p.groundY + p.jumpY, p.pos.z);
+    r.f.rot = p.rot;
+    root.position.copyFrom(r.f.pos);
+    root.rotation.y = p.rot;
+    root.scaling.setAll(r.scale);
+    if (dt > 0) r.f.model.update(dt, { speed: Math.min(1, p.moveSpeed / 7) });
+    // unicorn rainbow sparkle trail
+    if (r.f.owned.species === "unicorn" && p.moveSpeed > 2) {
+      this.trailT -= dt;
+      if (this.trailT <= 0) {
+        this.trailT = 0.09;
+        const cols: [string, string][] = [
+          ["#ffb3cf", "#fff3a6"],
+          ["#bfe0f6", "#d9c6f5"],
+          ["#bfe9d6", "#fff3a6"],
+        ];
+        this.fx.sparkles(p.pos.add(new Vector3(0, 0.5, 0)), 3, cols[Math.floor(Math.random() * 3)]);
+      }
+    }
+  }
+
   partyHas(s: SpeciesId) {
     return this.state.critters.some((c) => c.inParty && c.species === s);
   }
 
   rebuildFollowers() {
+    if (this.riding) {
+      this.riding = null;
+      this.player.rideOffset = 0;
+    }
     this.followers.forEach((f) => f.dispose());
     this.followers = this.state.critters.filter((c) => c.inParty).map((c) => new Follower(this.scene, c));
     const p = this.player.pos;
     this.followers.forEach((f, i) => f.place(p.add(new Vector3(0, 0, -1.2 * (i + 1))), 0));
     this.refreshParty();
+    this.ui.setRideVisible(this.riders().length > 0);
   }
 
   rebuildHaven() {
@@ -1196,8 +1563,9 @@ export class Game {
     node.readyAt = this.time + 75;
     node.setReady(false);
     let n = 1 + (Math.random() < 0.5 ? 1 : 0);
-    const talent: Partial<Record<NodeKind, SpeciesId>> = { petal: "puffbun", twig: "fennix", berry: "hoglet", pebble: "ribbit", crystal: "molly", apple: "redpanda", mushroom: "redpanda", honey: "redpanda" };
-    const helper = talent[node.kind] ?? (node.kind.startsWith("dye_") ? "puffbun" : undefined);
+    // Helper-class critters find extra stuff
+    const talent: Partial<Record<NodeKind, SpeciesId>> = { petal: "duckling", twig: "hoglet", berry: "hoglet", mushroom: "hoglet", pebble: "molly", crystal: "molly", apple: "redpanda", honey: "redpanda" };
+    const helper = talent[node.kind] ?? (node.kind.startsWith("dye_") ? "duckling" : undefined);
     if (this.buffActive("helpful") && this.followers.length) n++;
     if (helper && this.partyHas(helper)) {
       n += this.bestFriendship(helper) >= 5 ? 2 : 1;
@@ -1484,7 +1852,7 @@ export class Game {
 }
 
 function interiorOrigin(id: string): Vector3 {
-  const order = ["home", "teahouse", "library", "flowershop", "sewing", "workshop", "cave"];
+  const order = ["home", "teahouse", "library", "flowershop", "sewing", "workshop", "cave", "bakery", "thornwild"];
   const i = Math.max(0, order.indexOf(id));
   return new Vector3(1000 + i * 120, 0, 1000);
 }

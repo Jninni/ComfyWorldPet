@@ -144,6 +144,8 @@ export const LOC: {
   garden: { x: number; z: number }[];
   crumbs: [number, number][];
   thiefNest: [number, number];
+  thornGate: { x: number; z: number };
+  unicornGlade: { x: number; z: number };
 } = {
   buildings: {
     home: { x: -17, z: -19, rot: 0 },
@@ -187,4 +189,8 @@ export const LOC: {
     [-89, 41],
   ],
   thiefNest: [-95, 50],
+  // the dangerous Thornwild opens up north-east of Whisper Meadow after the main story
+  thornGate: { x: 24, z: 108 },
+  // a shy unicorn appears here once the Thornwild is safe again
+  unicornGlade: { x: -26, z: 92 },
 };

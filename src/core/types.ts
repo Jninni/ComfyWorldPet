@@ -40,6 +40,12 @@ export interface InteriorDef {
   lighting: StageLighting;
   /** per-frame animation hook (flickering lamps, swaying vines…) */
   update?: (dt: number, t: number) => void;
+  /** dangerous areas: 0 = gloomy, 1 = fully cleansed (brighter colours, happy lighting) */
+  cleanse?: (f: number) => void;
+  /** lighting to use once cleansed */
+  cleansedLighting?: StageLighting;
+  /** true for areas with Gloomies (enables hearts & combat) */
+  dangerous?: boolean;
 }
 
 /** Building exterior placed in the overworld. Coordinates in WORLD space. */

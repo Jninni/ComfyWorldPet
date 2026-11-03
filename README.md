@@ -51,8 +51,10 @@ sky pastels, thick soft plum outlines, chunky rounded shapes, scalloped rugs, he
 | Talk / interact / confirm | ✋ button | Ⓐ | Space / E / Enter |
 | Jump (when nothing to talk to) | ✋ button | Ⓐ | Space |
 | Sprint (hold) | 👟 button | Ⓑ or LT / RT | Shift |
+| Ride / dismount (Rider critter in party) | 🐴 button | Ⓨ | R |
+| Sparkle Wand attack (Thornwild) | ⚔️ button | Ⓧ | F |
 | Back (menus) | ✕ / tap outside | Ⓑ | Esc |
-| Bag (quests, journal, party, map, style, settings) | 🐾 button / 🎒 | Ⓧ / Start | Q / Tab / P |
+| Bag (quests, journal, party, map, style, settings) | 🐾 button / 🎒 | Ⓧ (Start in the Thornwild) | Q / Tab / P |
 | Journal | — | Ⓨ | J |
 | Rotate camera | Drag with one finger (right side) | Right stick or LB / RB | Drag with the mouse, or `[` `]` / `,` `.` |
 | Zoom | Pinch | Right stick up/down | Mouse wheel |
@@ -83,6 +85,12 @@ Menus are fully navigable with the d-pad / stick (spatial focus), LB/RB switch t
     backpacks, dyed with flowers you collect (rose, sunflower, lavender, daisy, bluebell, poppy, mint — each grows
     in its own area). Live preview on your character; everything you make lives in your wardrobe (Bag → Style).
   * **Rufflepaw the red panda** and the *Pastry Thief* quest: follow the crumb trail from the bakery into Mossy Woods.
+* **Critter classes** — 🧺 Helpers (garden, gathering, sewing, baking bonuses), ⚡ Boosters (run faster, jump
+  higher, double jump, glide), 🐴 Riders (giant-hopping frog, galloping pony, double-jumping rainbow unicorn) and
+  ⚔️ Guardians (Emberling, Roarlet, Shellby) who fight alongside you. Best-friend critters (5 hearts) get stronger.
+* **The Thornwild** (unlocked after the main story): light action combat against Gloomies with the Sparkle Wand,
+  5 hearts, campfire checkpoints, trapped guardians to free, and the Gloom King boss — jump his shockwaves! Defeating
+  him cleanses the forest and reveals the shy Moonbeam Unicorn.
 * Autosave (localStorage) + nap in your bed to save. Saves from older versions upgrade automatically.
 
 ## Code map
