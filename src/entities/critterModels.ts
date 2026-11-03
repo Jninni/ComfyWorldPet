@@ -1175,7 +1175,8 @@ function buildRibbit(c: Ctx): Critter {
     blobM(s, [0.05, 0.018, 0.05], [-0.14, 0.015, 0.16], P.legs),
     blobM(s, [0.05, 0.018, 0.05], [0.14, 0.015, 0.16], P.legs),
   ];
-  if (c.rare) bs.push(...crown(c, [0, 0.31, -0.02], 0.85, P.acc));
+  // (rare) a jaunty little crown on one eye bump, leaving the back free as a seat
+  if (c.rare) bs.push(...crown(c, [0.115, 0.37, 0.065], 0.72, P.acc));
     return bs;
   };
   const faces = buildHeads(k, head, [0, 0.05, 0], bs, {
@@ -1204,10 +1205,16 @@ function buildRibbit(c: Ctx): Critter {
   const thN = k.node("throat", head, thp);
   k.part("throatMesh", thN, thp, [blobM(s, [0.08, 0.05, 0.05], [0, 0.11, 0.15], P.belly)], { outline: 0.015 });
   const legs: Leg[] = [leg(ln, 0, 0, 0, 1, -0.07, -0.9)];
+  // rider seat: the top of the back (the game scales the frog up ×2.4 while ridden)
+  // (the frog's whole body is its "head" node, so the seat rides on that and follows its looks too)
+  const SEAT = 0.3;
+  const seat = k.node("seat", head, [0, SEAT, 0]);
   const rig: Partial<Rig> & { head: TransformNode; faces: Mesh[] } = {
     head,
     faces,
     legs,
+    seat,
+    seatY: SEAT,
     nodes: { throat: thN },
     hook: (cr) => {
       // throat sac inflates every few seconds while idle
@@ -1660,10 +1667,11 @@ function buildEquine(c: Ctx, uni: boolean): Critter {
   body.push(capOn(s, BE, 0, Math.PI / 2, 0.76, P.trim, { sx: 1.45, sy: 0.82, lift: 0.005, wob: 0.06, seed: 2, segs: 40 }));
   body.push(capOn(s, BE, 0, Math.PI / 2, 0.68, P.blanket, { sx: 1.45, sy: 0.8, lift: 0.011, segs: 40 }));
   body.push(blobM(s, [0.17, 0.05, 0.17], [0, SEAT - 0.025, -0.04], P.pad, undefined, P.trim, 12));
-  for (const sd of [-1, 1]) {
-    const hp = surf(BE, sd * Math.PI * 0.5, 0.3, 0.016);
-    body.push(heartM(s, 0.07, 0.018, hp.p, P.emblem, rotZTo(hp.n)));
-  }
+  if (!uni)
+    for (const sd of [-1, 1]) {
+      const hp = surf(BE, sd * Math.PI * 0.5, 0.3, 0.016);
+      body.push(heartM(s, 0.07, 0.018, hp.p, P.emblem, rotZTo(hp.n)));
+    }
   // mane crest: overlapping puffs from behind the ears down to the withers
   const mA: V3 = [0, 1.26, 0.33],
     mC: V3 = [0, 1.18, 0.12],
@@ -1684,8 +1692,8 @@ function buildEquine(c: Ctx, uni: boolean): Critter {
   if (uni) {
     // tiny star mark on the flank
     for (const sd of [-1, 1]) {
-      const sp = surf(BE, sd * 2.05, 0.18, 0.014);
-      body.push(puffStar(s, 5, 0.06, 0.027, 0.014, sp.p, P.star, rotZTo(sp.n)));
+      const sp = surf(BE, sd * 2.15, 0.12, 0.014);
+      body.push(puffStar(s, 5, 0.07, 0.032, 0.016, sp.p, P.star, rotZTo(sp.n)));
     }
   }
   k.part("body", c.base, [0, 0, 0], body);
@@ -1763,7 +1771,7 @@ function buildEquine(c: Ctx, uni: boolean): Critter {
   });
   if (uni) {
     const hn: V3 = [0, 1.27, 0.53];
-    const horn = spiralHorn(s, 0.25, 0.052, hn, [0.45, 0, 0], P.horn, P.hornB, 2.6);
+    const horn = spiralHorn(s, 0.28, 0.054, hn, [0.42, 0, 0], P.horn, P.hornB, 2.8);
     k.part("horn", head, hn, [horn], { outline: 0.01, material: toonMat(s, { name: "unicornHorn" + (R ? "R" : ""), emissive: P.hornE, rim: 0.2 }), shadow: true });
   }
   const ears: Ear[] = [];
@@ -1828,7 +1836,7 @@ function buildEquine(c: Ctx, uni: boolean): Critter {
 function buildEmberling(c: Ctx): Critter {
   const P = c.rare
     ? { skin: "#c9b6ff", skinB: "#ad97f2", belly: "#fff4d6", stripe: "#f3dcb0", spike: "#ff9fc8", spikeT: "#ffd6ea", horn: "#fff6dc", wing: "#ffa8cf", wingIn: "#ffd9ea", claw: "#fff6e6", heart: "#ff8fb8", nose: "#7a5fb8", glow: "#ffb3dc", glowE: "#c8508c", fire: "#ffd1f0", fireE: "#d870b8" }
-    : { skin: "#ffb48a", skinB: "#f7976a", belly: "#fff1d2", stripe: "#f6d6a8", spike: "#ff8b6e", spikeT: "#ffc59a", horn: "#fff3d6", wing: "#ff957a", wingIn: "#ffc9a6", claw: "#fff6e6", heart: "#ff8aa6", nose: "#c45f44", glow: "#ffb070", glowE: "#d8622c", fire: "#fff0a0", fireE: "#e0a040" };
+    : { skin: "#ffb48a", skinB: "#f7976a", belly: "#fff1d2", stripe: "#f6d6a8", spike: "#ff8b6e", spikeT: "#ffc59a", horn: "#fff3d6", wing: "#ff957a", wingIn: "#ffc9a6", claw: "#fff6e6", heart: "#ff8aa6", nose: "#c45f44", glow: "#ffa47a", glowE: "#e0603a", fire: "#fff0a0", fireE: "#e0a040" };
   const { scene: s, k } = c;
   // pear-shaped tummy with a striped cream belly, little back spikes and nub arms
   const BE: Ell = { c: [0, 0.24, -0.02], r: [0.2, 0.2, 0.185] };
@@ -1843,7 +1851,6 @@ function buildEmberling(c: Ctx): Critter {
   }
   for (const sd of [-1, 1]) {
     body.push(blobM(s, [0.048, 0.07, 0.05], [sd * 0.175, 0.27, 0.09], P.skin, [0.5, 0, sd * 0.5]));
-    body.push(ballM(s, 0.014, [sd * 0.2, 0.215, 0.135], P.claw, undefined, 4));
   }
   k.part("body", c.base, [0, 0, 0], body);
 
@@ -1886,15 +1893,17 @@ function buildEmberling(c: Ctx): Critter {
     eyePitch: 0.13,
     eyeW: 0.04,
     eyeH: 0.053,
-    mouth: { ell: MU, pitch: -0.12, w: 0.02, h: 0.011, style: "w" },
+    mouth: { ell: MU, pitch: -0.2, w: 0.032, h: 0.014, style: "smile" },
     fang: true,
   });
   // warm glowing cheeks (emissive, outside the outline)
   const gl: Mesh[] = [];
   for (const sd of [-1, 1]) gl.push(decal(s, HE, sd * 0.78, -0.12, [0.048, 0.03, 0.02], P.glow, -0.25, 0, 8));
-  const glowM = k.part("glow", head, hp, gl, { outline: false, material: toonMat(s, { name: "emberGlow" + (c.rare ? "R" : ""), emissive: P.glowE, rim: 0 }), shadow: false });
+  const glowMat = toonMat(s, { name: "emberGlow" + (c.rare ? "R" : ""), emissive: P.glowE, rim: 0 });
+  const glowHot = toonMat(s, { name: "emberGlowHot" + (c.rare ? "R" : ""), emissive: P.fireE, rim: 0 });
+  const glowM = k.part("glow", head, hp, gl, { outline: false, material: glowMat, shadow: false });
   // sparkle-sneeze burst (only shown mid-attack)
-  const bp: V3 = [0, 0.45, 0.33];
+  const bp: V3 = [0, 0.48, 0.33];
   const burstN = k.node("burst", head, bp);
   const burst: Mesh[] = [puffStar(s, 5, 0.085, 0.04, 0.025, bp, P.fire)];
   for (let i = 0; i < 5; i++) {
@@ -1958,18 +1967,20 @@ function buildEmberling(c: Ctx): Critter {
         p.face = FACE.closed;
       } else if (u < 0.62) {
         // "CHOO!"
-        const a = sstep(0.45, 0.54, u);
-        p.hp = lerp(-0.38, 0.32, a);
+        const a = sstep(0.45, 0.53, u);
+        p.hp = lerp(-0.38, 0.14, a);
+        p.hz = 0.04 * a;
         p.sq = lerp(-0.1, 0.14, a);
-        p.z = lerp(-0.03, 0.06, a);
-        p.pitch = lerp(-0.08, 0.12, a);
+        p.z = lerp(-0.03, 0.07, a);
+        p.pitch = lerp(-0.08, 0.1, a);
         p.face = FACE.happy;
       } else {
         const a = sstep(0.62, 1, u);
-        p.hp = 0.32 * (1 - a);
+        p.hp = 0.14 * (1 - a);
+        p.hz = 0.04 * (1 - a);
         p.sq = 0.14 * (1 - a) - 0.04 * Math.sin(Math.PI * a);
-        p.z = 0.06 * (1 - a);
-        p.pitch = 0.12 * (1 - a);
+        p.z = 0.07 * (1 - a);
+        p.pitch = 0.1 * (1 - a);
         if (a < 0.6) p.face = FACE.happy;
       }
       void cr;
@@ -1977,14 +1988,15 @@ function buildEmberling(c: Ctx): Critter {
     hook: (cr) => {
       const u = cr.atkU;
       // wings: a lazy idle flutter, frantic flapping during the sneeze
-      const flap = u >= 0 ? (u < 0.45 ? 0.5 + 0.5 * Math.sin(cr.t * 30) : 0.9 * (1 - sstep(0.6, 1, u))) : 0;
+      const flap = u >= 0 ? (u < 0.45 ? 0.25 : 0.45 * (1 - sstep(0.6, 1, u))) : 0;
       for (const w of wingNodes) {
         const sd = w === wingNodes[0] ? -1 : 1;
-        w.rotation.z += sd * (0.08 * Math.sin(cr.t * 3.1) * (1 - cr.sleep) + flap * (0.5 + 0.5 * Math.sin(cr.t * 38)));
+        w.rotation.z += sd * (0.08 * Math.sin(cr.t * 3.1) * (1 - cr.sleep) + flap * (0.4 + 0.6 * Math.sin(cr.t * 38)));
       }
-      // cheeks glow brighter as it winds up
-      const g = 1 + (u >= 0 ? 0.45 * Math.sin(Math.PI * Math.min(1, u / 0.62)) : 0) + 0.06 * Math.sin(cr.t * 2.6);
-      glowM.scaling.set(g, g, g);
+      // cheeks glow brighter as it winds up (material swap: no extra draw calls)
+      const hot = u >= 0.1 && u < 0.7;
+      const want = hot ? glowHot : glowMat;
+      if (glowM.material !== want) glowM.material = want;
       // the sneeze burst
       const on = u >= 0.47 && u < 0.92;
       if (burstN.isEnabled() !== on) burstN.setEnabled(on);
@@ -1992,7 +2004,7 @@ function buildEmberling(c: Ctx): Critter {
         const a = (u - 0.47) / 0.45;
         const sc = 0.4 + 1.3 * Math.sin(Math.PI * Math.min(1, a * 1.6)) * (1 - a * 0.3);
         burstN.scaling.set(sc, sc, sc);
-        burstN.position.z = cr.rig.head.position.z * 0 + 0.33 - 0.03 + a * 0.12;
+        burstN.position.z = bp[2] - hp[2] + a * 0.16;
         burstM.rotation.z = a * 2.4;
       }
     },
@@ -2210,6 +2222,11 @@ function buildShellby(c: Ctx): Critter {
     legs,
     ears,
     nodes: { plume: plN },
+    // snoozes tucked halfway into its shell
+    hook: (cr) => {
+      head.position.z -= 0.06 * cr.sleep;
+      head.position.y -= 0.02 * cr.sleep;
+    },
     attackPose: (cr, u, p) => {
       if (u < 0.38) {
         // brace: tuck the head in and hunker down behind the shell

@@ -1,6 +1,6 @@
 /**
  * Critter gallery.  Query params:
- *   only=<species>   show just one species (normal + rare unless rare=0/1)
+ *   only=<species>   show just one species (normal + rare unless rare=0/1);  list=a,b,c  a subset of species
  *   rare=0|1|both    which colourways (default both)
  *   zoom=1           close-up camera     far=1  gameplay camera (~20 m, 35° fov)
  *   anim=idle|walk|trot|sleep|excited|happy|surprised|love|sad|attack   (emotes repeat every 2 s, attacks every 1.2 s)
@@ -24,14 +24,15 @@ const scene = stage.scene;
 const only = q.get("only") as SpeciesId | null;
 const rareQ = q.get("rare") ?? "both";
 const anim = q.get("anim") ?? "idle";
-const ids = only ? [only] : SPECIES_IDS;
+const listQ = q.get("list");
+const ids = only ? [only] : listQ ? (listQ.split(",") as SpeciesId[]) : SPECIES_IDS;
 const variants: (0 | 1)[] = rareQ === "0" ? [0] : rareQ === "1" ? [1] : [0, 1];
 
 const ground = MeshBuilder.CreateGround("g", { width: 60, height: 60, subdivisions: 2 }, scene);
 paint(ground, "#c9ecb0");
 finishMesh(ground, scene, { outline: false, castShadow: false });
 
-const spacing = only ? 0.85 : 0.95;
+const spacing = only ? 0.85 : listQ ? 1.5 : 0.95;
 const critters: { m: CritterModel; st: CritterAnimState; off: number }[] = [];
 const speedQ = q.get("speed");
 const mkState = (): CritterAnimState => ({ speed: speedQ ? +speedQ : anim === "walk" ? 1 : anim === "trot" ? 0.4 : 0, sleeping: anim === "sleep", excited: anim === "excited" });
@@ -81,8 +82,8 @@ if (only && strip > 0) {
   variants.forEach((v, j) => {
     const m = buildCritter(scene, id, v);
     const x = -(i - (ids.length - 1) / 2) * spacing;
-    const z = -j * 1.1;
-    const sp = only ? Math.max(spacing, m.radius * 2.6) : spacing;
+    const z = -j * (listQ ? 1.7 : 1.1);
+    const sp = only ? Math.max(spacing, m.radius * 2.6 * (riderQ && id === "ribbit" ? 2.4 : scaleQ)) : spacing;
     m.root.position.set(only ? (j - (variants.length - 1) / 2) * sp : x, 0, only ? 0 : z);
     if (scaleQ !== 1) m.root.scaling.setAll(scaleQ);
     m.root.rotation.y = +(q.get("yaw") ?? "0");
@@ -105,8 +106,9 @@ if (only && strip > 0) {
   cam.radius = strip * sw * 0.62;
   cam.beta = 1.38;
 } else if (only) {
-  const big = Math.max(1, critters[0].m.height / 0.8);
-  cam.target.set(0, critters[0].m.height * 0.5 * (riderQ ? 1.3 : 1), 0);
+  const hh = critters[0].m.height * critters[0].m.root.scaling.y;
+  const big = Math.max(1, hh / 0.8);
+  cam.target.set(0, hh * 0.5 * (riderQ ? 1.3 : 1), 0);
   cam.radius = (zoom ? 1.6 : 2.6) * big * (big > 1 ? 1.3 : 1);
   cam.beta = 1.35;
   if (variants.length === 1 && zoom) cam.radius = 1.15 * big * (big > 1 ? 1.4 : 1);

@@ -548,10 +548,10 @@ function buildGloomblob(scene: Scene): Enemy {
   );
   const face = grumpyFace(s, {
     head: BE,
-    eyeYaw: 0.33,
+    eyeYaw: 0.34,
     eyePitch: 0.2,
-    eyeW: 0.085,
-    eyeH: 0.07,
+    eyeW: 0.096,
+    eyeH: 0.08,
     glow: C.amber,
     brow: 0.022,
     browSlant: 0.7,
@@ -598,8 +598,8 @@ function buildThornbug(scene: Scene): Enemy {
     head: HE,
     eyeYaw: 0.42,
     eyePitch: 0.12,
-    eyeW: 0.068,
-    eyeH: 0.06,
+    eyeW: 0.076,
+    eyeH: 0.068,
     glow: C.magenta,
     brow: 0.018,
     browSlant: 0.85,
@@ -697,10 +697,10 @@ function buildPuffspitter(scene: Scene): Enemy {
   );
   const face = grumpyFace(s, {
     head: CE,
-    eyeYaw: 0.34,
+    eyeYaw: 0.35,
     eyePitch: -0.05,
-    eyeW: 0.08,
-    eyeH: 0.066,
+    eyeW: 0.088,
+    eyeH: 0.073,
     glow: C.amber,
     brow: 0.021,
     browSlant: 0.9,
@@ -816,7 +816,7 @@ function buildGloomking(scene: Scene): Enemy {
   const capeN = new TransformNode("capeN", s);
   capeN.parent = c.base;
   capeN.position.set(...capePiv);
-  const cape = capeM(s, { a0: Math.PI * 0.42, a1: Math.PI * 1.58, yTop: 2.1, yBot: 0.06, rTop: 0.95, rBot: 1.5, zOff: -0.12, wave: 0.14, waves: 5, outer: "#3a2a5e", outerBot: "#1f1634", inner: "#7a4aa0", thick: 0.04 });
+  const cape = capeM(s, { a0: Math.PI * 0.56, a1: Math.PI * 1.44, yTop: 2.1, yBot: 0.06, rTop: 0.95, rBot: 1.5, zOff: -0.12, wave: 0.14, waves: 5, outer: "#3a2a5e", outerBot: "#1f1634", inner: "#7a4aa0", thick: 0.04 });
   const collar: Mesh[] = [cape];
   for (let i = 0; i < 7; i++) {
     const a = Math.PI * (0.55 + (i / 6) * 0.9);
@@ -875,8 +875,9 @@ export function buildHappyBlob(scene: Scene): EnemyModel {
   for (const m of cr) {
     m.parent = crownN;
   }
-  crownN.position.set(0.1, 0.56, 0.02);
-  crownN.rotation.set(0.1, 0, -0.35);
+  crownN.position.set(0.1, 0.555, 0.0);
+  crownN.rotation.set(0.12, 0, -0.32);
+  crownN.scaling.setAll(0.78);
   for (const m of cr) {
     m.computeWorldMatrix(true);
   }
@@ -889,7 +890,6 @@ export function buildHappyBlob(scene: Scene): EnemyModel {
     m.rotationQuaternion = null;
   }
   crownN.dispose();
-  shapes.push(...cr);
   const face = faceShapes(s, {
     head: BE,
     eyeYaw: 0.33,
@@ -901,7 +901,7 @@ export function buildHappyBlob(scene: Scene): EnemyModel {
     cheekR: 0.04,
     mouth: { pitch: -0.16, w: 0.04, h: 0.03, style: "smile" },
   }, "happy");
-  makePart(s, "body", c.base, [0, 0, 0], [0, 0, 0], { shapes, flat: face, outline: 0.02, outlineColor: "#8a6f96", material: c.body.mat, shadow: true });
+  makePart(s, "body", c.base, [0, 0, 0], [0, 0, 0], { shapes, flat: [...face, ...cr], outline: 0.02, outlineColor: "#8a6f96", material: c.body.mat, shadow: true });
   const star = puffStar(s, 4, 1, 0.38, 0.25, [0, 0, 0], "#fff1a0");
   const sparkMat = toonMat(s, { name: "happySparkle", emissive: "#ffffff", rim: 0 });
   const wisps = [new Wisps(s, c.base, { count: 6, at: [0, 0.35, 0], spread: [0.36, 0.34], rise: 0.6, drift: 0.4, size: 0.045, rate: 0.5, color: "#fff1a0", material: sparkMat, shape: star, stretch: 1 })];

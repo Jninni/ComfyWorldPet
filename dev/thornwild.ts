@@ -103,7 +103,10 @@ async function main() {
     const f = num("cleanse", 0);
     def.cleanse?.(f);
     stage.setLighting(lerpLighting(def.lighting, def.cleansedLighting!, f));
-    if (qs.get("bossgate")) def.setBossGate(true);
+    if (qs.get("bossgate")) {
+      def.setBossGate(true);
+      def.update?.(5, 0); // snap the rise animation
+    }
     const spot = qs.get("spot");
     const target = spot && def.spots[spot] ? def.spots[spot].clone() : def.camera.target.clone();
     target.y = 1.1;

@@ -18,13 +18,13 @@
  * thin-instanced thorns, pops up a thin-instanced flower field, fades mist + gloomy motes and fades in
  * golden sparkles + butterflies. Pair with `cleansedLighting` (see `lerpLighting`).
  */
-import { Mesh, MeshBuilder, TransformNode, Vector3, VertexBuffer, Color3, Quaternion, type Scene, type StandardMaterial } from "@babylonjs/core";
+import { Mesh, MeshBuilder, TransformNode, Vector3, VertexBuffer, Color3, Quaternion, type Scene } from "@babylonjs/core";
 import { Batch, finishMesh, lathe, scallopRug, softCyl } from "../render/Shapes";
 import { col, mixCol, jitterCol, rng } from "../render/Palette";
 import { toonMat } from "../render/Toon";
 import type { StageLighting } from "../render/Stage";
 import type { Collider, InteriorDef } from "../core/types";
-import { elb, sph, addRock, addLog, addStump, addFlowerPatch, makeMotes, linkBatches, LEAVES_BUILD } from "./props";
+import { elb, addRock, addLog, addStump, addFlowerPatch, makeMotes, linkBatches, LEAVES_BUILD } from "./props";
 import {
   TAU,
   smooth01,
@@ -339,12 +339,13 @@ export function buildThornwild(scene: Scene, origin: Vector3): ThornwildDef {
     [-4.2, -20.2, "amber", 0.9], // camp, by the NW exit
     [19.0, 5.4, "magenta", 1.0], // flanking the boss gate
     [26.2, 5.0, "magenta", 0.95],
-    [-30.0, 5.6, "amber", 0.85], // checkpoint 0
-    [-26.2, -19.4, "magenta", 1.0], // arena 0
-    [-8.4, 23.4, "amber", 0.9], // arena 1
-    [13.4, 1.6, "amber", 0.9], // arena 2
+    [-27.6, 5.9, "amber", 0.85], // checkpoint 0
+    [-23.6, -17.9, "magenta", 1.0], // arena 0
+    [-10.6, 22.4, "amber", 0.9], // arena 1
+    [11.6, 1.6, "amber", 0.9], // arena 2
   ];
   for (const [x, z, h] of bigShrooms) pools.push([x, z, col(SHROOM_LIGHT[h]), 3.4, 0.85]);
+  reserved.push(...bigShrooms.map(([x, z]) => [x, z] as [number, number]));
 
   // ------------------------------------------------------------------ floor (two colour sets: gloomy / cleansed)
   const GX0 = -50,
@@ -509,8 +510,10 @@ export function buildThornwild(scene: Scene, origin: Vector3): ThornwildDef {
         for (let j = 0; j < nT; j++) {
           const [sx, sy, sz, rx, ry, rz] = surf[Math.floor(r() * surf.length)];
           const ba = Math.atan2(dzz, dx);
-          const a = ba + rand(-1.5, 1.5);
-          const el = rand(-0.1, 0.95);
+          const a = ba + (r() < 0.5 ? -1 : 1) * rand(0.55, 1.6);
+          let el = rand(0.05, 1.05);
+          // thorns aimed at the camera (-Z) read as dots: tilt those upward so their cone shows
+          if (Math.sin(a) < -0.35) el = Math.max(el, 0.95 + 0.4 * (-Math.sin(a) - 0.35));
           const ux = Math.cos(a) * Math.cos(el),
             uy = Math.sin(el),
             uz = Math.sin(a) * Math.cos(el);
@@ -600,13 +603,13 @@ export function buildThornwild(scene: Scene, origin: Vector3): ThornwildDef {
         }
       }
     }
-    if (r() < 0.05 && wf.h > 1.0) addGloomShroom(scene, main, glow, ox + wf.x - wf.gx * 0.15, oy + wf.h - 0.1, oz + wf.z - wf.gz * 0.15, 0.75, pick(["amber", "magenta"] as const), r);
+    if (r() < 0.035 && wf.h > 1.0) addGloomShroom(scene, main, glow, ox + wf.x - wf.gx * 0.15, oy + wf.h - 0.1, oz + wf.z - wf.gz * 0.15, 0.75, pick(["amber", "magenta"] as const), r);
   }
 
   // ------------------------------------------------------------------ outer forest: twisted trees & dark canopy
+  const cand: { lx: number; lz: number; d: number; s: number; capT: number }[] = [];
   {
     const cellO = 2.5;
-    let nTrees = 0;
     for (let gz = -46; gz <= 46; gz += cellO) {
       for (let gx = -50; gx <= 54; gx += cellO) {
         const lx = gx + rand(-0.6, 0.6),
@@ -617,9 +620,8 @@ export function buildThornwild(scene: Scene, origin: Vector3): ThornwildDef {
         if (d < -10 && r() < 0.45) continue;
         const s = rand(0.85, 1.25);
         const capT = losCap(lx, lz, 1.2 * s);
-        if (d > -7 && capT > 3.4 && nTrees < 46 && r() < 0.42) {
-          addTwistedTree(scene, trees, ox + lx, oy, oz + lz, s, r, capT);
-          nTrees++;
+        if (d > -7 && capT > 3.4 && r() < 0.5) {
+          cand.push({ lx, lz, d, s, capT });
           continue;
         }
         // dark canopy puff / bramble mass (filler), height limited for the camera
@@ -642,6 +644,27 @@ export function buildThornwild(scene: Scene, origin: Vector3): ThornwildDef {
     }
   }
 
+  // twisted trees: an even pick over all candidates (≤ 48), the rest become canopy puffs
+  {
+    const chosen: { lx: number; lz: number }[] = [];
+    for (let i = cand.length - 1; i > 0; i--) {
+      const j = Math.floor(r() * (i + 1));
+      [cand[i], cand[j]] = [cand[j], cand[i]];
+    }
+    for (const c of cand) {
+      if (chosen.length < 42 && chosen.every((o) => Math.hypot(o.lx - c.lx, o.lz - c.lz) > 3.6)) {
+        addTwistedTree(scene, trees, ox + c.lx, oy, oz + c.lz, c.s, r, c.capT);
+        chosen.push(c);
+      } else {
+        const rr = rand(1.3, 1.8);
+        const h = Math.min(rand(1.8, 2.8), losCap(c.lx, c.lz, rr));
+        const m = elb(scene, rr, Math.min(rr * 0.75, h * 0.5), rr, { color: jitterCol(pick(moundCols), 0.03, r), bottom: "#8f88a0" }, 6);
+        m.position.set(ox + c.lx, oy + h - Math.min(rr * 0.75, h * 0.5), oz + c.lz);
+        pick([canopyA, canopyB, canopyA]).add(m);
+      }
+    }
+  }
+
   // ------------------------------------------------------------------ floor dressing: stepping stones, ferns, shrooms, rocks, stumps
   // stepping stones along trails
   for (const s of SHAPES) {
@@ -655,13 +678,13 @@ export function buildThornwild(scene: Scene, origin: Vector3): ThornwildDef {
       const px = s.x1 + (s.x2 - s.x1) * t + nx * side,
         pz = s.z1 + (s.z2 - s.z1) * t + nz * side;
       if (sdf(px, pz) < 1.0 || !isFree(px, pz, 0.7)) continue;
-      const st = elb(scene, rand(0.32, 0.42), 0.06, rand(0.26, 0.34), { color: jitterCol("#e6dcf0", 0.03, r), bottom: "#a99cc0" }, 6);
+      const st = elb(scene, rand(0.32, 0.42), 0.06, rand(0.26, 0.34), { color: jitterCol("#e6dcf0", 0.03, r), bottom: "#a99cc0" }, 5);
       at(st, ox + px, oy + 0.02, oz + pz, [0, rand(0, 6), 0]);
       main.add(st);
     }
   }
   // fern / grass tufts at floor edges (tinted → green, sway)
-  for (let i = 0; i < 420; i++) {
+  for (let i = 0; i < 320; i++) {
     const lx = rand(-30, 34),
       lz = rand(-35, 27);
     const d = sdf(lx, lz);
@@ -736,10 +759,25 @@ export function buildThornwild(scene: Scene, origin: Vector3): ThornwildDef {
   addFlowerPatch(main, ox - 1.9, oz - 33.8, 0.8, { y: oy, palette: ["white", "butter", "pink"], density: 5, seed: 53 });
   addFlowerPatch(main, ox + 2.0, oz - 34.4, 0.7, { y: oy, palette: ["white", "butter", "lilac"], density: 5, seed: 54 });
   // checkpoint logs (a cosy seat at each fire)
-  const seat = (fx: number, fz: number, a: number, seed: number) => colliders.push(...addLog(main, ox + fx + Math.cos(a) * 1.75, oz + fz + Math.sin(a) * 1.75, { y: oy, rotY: -a + Math.PI / 2, length: 1.3, seed }));
-  seat(FIRES[1][0], FIRES[1][1], Math.PI * 0.95, 61);
-  seat(FIRES[2][0], FIRES[2][1], Math.PI * 0.3, 62);
-  seat(FIRES[3][0], FIRES[3][1], -Math.PI * 0.35, 63);
+  const seat = (fi: number, seed: number) => {
+    const [fx, fz] = FIRES[fi];
+    const [sx, sz] = SPOTS[fi === 0 ? "camp" : `checkpoint_${fi - 1}`];
+    for (let k = 0; k < 16; k++) {
+      const a = (k / 16) * TAU;
+      const px = fx + Math.cos(a) * 1.7,
+        pz = fz + Math.sin(a) * 1.7;
+      const ex = Math.abs(Math.sin(a)) * 0.65,
+        ez = Math.abs(Math.cos(a)) * 0.65; // log runs tangentially
+      if (sdf(px, pz) < 0.9 || sdf(px + ex, pz + ez) < 0.6 || sdf(px - ex, pz - ez) < 0.6) continue;
+      if (Math.hypot(px - sx, pz - sz) < 1.6) continue;
+      if (!SHAPES.every((sh) => sh.trail === false || shapeD(sh, px, pz) < 1.2)) continue; // not across the trail centre
+      colliders.push(...addLog(main, ox + px, oz + pz, { y: oy, rotY: -a + Math.PI / 2, length: 1.3, seed }));
+      return;
+    }
+  };
+  seat(1, 61);
+  seat(2, 62);
+  seat(3, 63);
   // a little lantern post at each checkpoint
   for (const [i, a] of [
     [1, 2.2],
@@ -864,24 +902,37 @@ export function buildThornwild(scene: Scene, origin: Vector3): ThornwildDef {
     const gt = new Batch(scene, "thornBossGateThorns");
     const gx0 = GATE.x - GATE.half,
       gx1 = GATE.x + GATE.half;
-    for (let s = 0; s < 5; s++) {
+    for (let s = 0; s < 7; s++) {
       const pts: Vector3[] = [];
-      const yb = 0.25 + s * 0.3;
-      for (let j = 0; j <= 14; j++) {
-        const u = j / 14;
+      const yb = 0.2 + s * 0.2;
+      const zOff = (s % 3) * 0.22 - 0.22;
+      for (let j = 0; j <= 16; j++) {
+        const u = j / 16;
         const lx = gx0 + (gx1 - gx0) * u;
-        const y = yb + Math.sin(u * Math.PI * 3 + s * 1.3) * 0.28 + Math.sin(u * Math.PI) * 0.15;
-        pts.push(new Vector3(lx, y, Math.cos(u * Math.PI * 4 + s) * 0.18));
+        const y = yb + Math.sin(u * Math.PI * 3 + s * 1.3) * 0.3 + Math.sin(u * Math.PI) * 0.12;
+        pts.push(new Vector3(lx, Math.max(0.12, y), zOff + Math.cos(u * Math.PI * 4 + s) * 0.16));
       }
-      gb.add(tubeMesh(scene, pts, () => 0.13 - s * 0.012, "#8f6fb0", "#5c4478", 6));
-      for (let j = 1; j < 14; j += 2) {
+      gb.add(tubeMesh(scene, pts, () => 0.15 - s * 0.01, "#8f6fb0", "#5c4478", 6));
+      for (let j = 1; j < 16; j += 2) {
         const p = pts[j];
-        const up = j % 4 === 1 ? 1 : -0.4;
+        const a = (j * 2.4 + s * 1.7) % TAU;
         const th = thornMesh(scene);
-        at(th, p.x, p.y, p.z - 0.1, alignY(0, up * 0.6, -1));
-        th.scaling.setAll(1.1);
+        at(th, p.x, p.y, p.z - 0.12, alignY(Math.cos(a) * 0.7, Math.sin(a) * 0.7 + 0.3, -1));
+        th.scaling.setAll(1.35);
         gt.add(th);
       }
+    }
+    // a few curly tendrils on top
+    for (let k = 0; k < 4; k++) {
+      const bx = gx0 + 0.8 + k * ((gx1 - gx0 - 1.6) / 3);
+      const pts: Vector3[] = [];
+      for (let j = 0; j <= 4; j++) pts.push(new Vector3(bx + j * 0.05, 1.3 + j * 0.12, 0));
+      const tp = pts[4];
+      for (let j = 1; j <= 5; j++) {
+        const q = (j / 5) * Math.PI * 1.6;
+        pts.push(new Vector3(tp.x + Math.sin(q) * 0.16, tp.y + (1 - Math.cos(q)) * 0.15, 0));
+      }
+      gb.add(tubeMesh(scene, pts, (u) => 0.07 * (1 - 0.6 * u), "#a084c2", "#6b4f8f", 5));
     }
     for (const sx of [gx0, gx1]) gb.add(at(elb(scene, 0.75, 1.05, 0.75, { color: "#8f6fb0", bottom: "#4a3866" }, 7), sx, 0.55, 0));
     const vm = gb.build({ material: toonMat(scene, { name: "thornGateVineMat", rim: 0.25 }), outline: 0.04 });

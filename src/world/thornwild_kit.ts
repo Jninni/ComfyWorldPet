@@ -248,7 +248,7 @@ export function addTwistedTree(scene: Scene, t: TreeTargets, x: number, y: numbe
     );
   }
   const R0 = 0.3 * s;
-  t.bark.add(tubeMesh(scene, trunkPts, (u) => R0 * (1 - 0.62 * u) * (u < 0.15 ? 1 + (0.15 - u) * 4 : 1), jitterCol("#ffffff", 0.03, r), "#b8b0c4", 7));
+  t.bark.add(tubeMesh(scene, trunkPts, (u) => R0 * (1 - 0.62 * u) * (u < 0.15 ? 1 + (0.15 - u) * 4 : 1), jitterCol("#ffffff", 0.03, r), "#b8b0c4", 6));
   // roots
   const a0 = rand(0, TAU);
   for (let i = 0; i < 3; i++) {
@@ -282,7 +282,7 @@ export function addTwistedTree(scene: Scene, t: TreeTargets, x: number, y: numbe
       const q = (j / 4) * Math.PI * 1.3;
       pts.push(new Vector3(tip.x + Math.cos(a) * Math.sin(q) * curl, tip.y + (1 - Math.cos(q)) * curl, tip.z + Math.sin(a) * Math.sin(q) * curl));
     }
-    t.bark.add(tubeMesh(scene, pts, (u) => 0.11 * s * (1 - 0.8 * u), "#f4f0f8", "#c4bccf", 5));
+    t.bark.add(tubeMesh(scene, pts, (u) => 0.11 * s * (1 - 0.8 * u), "#f4f0f8", "#c4bccf", 4));
     ends.push(pts[M]);
   }
   // droopy canopy puffs
@@ -325,7 +325,7 @@ export const SHROOM_LIGHT: Record<ShroomHue, string> = { amber: "#ffc27a", magen
 export function addGloomShroom(scene: Scene, main: Batch, glow: Batch, x: number, y: number, z: number, s: number, hue: ShroomHue, r: () => number) {
   const rand = (a: number, b: number) => a + (b - a) * r();
   const [ct, cb] = SHROOM_COLS[hue];
-  const n = 2 + Math.floor(r() * 3);
+  const n = 2 + Math.floor(r() * 2);
   for (let i = 0; i < n; i++) {
     const a = rand(0, TAU),
       d = i === 0 ? 0 : rand(0.2, 0.42) * s;
@@ -373,7 +373,7 @@ export function addGloomShroom(scene: Scene, main: Batch, glow: Batch, x: number
             [0, 0.02],
           ],
           { color: ct, bottom: cb },
-          9,
+          8,
         ),
         tx,
         ty,
