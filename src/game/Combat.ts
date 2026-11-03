@@ -108,6 +108,8 @@ export class Combat {
     this.waves = [];
     this.boss = null;
     this.active = false;
+    this.invuln = 0;
+    this.g.player?.model.root.setEnabled(true);
     this.setShield(false);
     this.heartsEl.style.display = "none";
     this.bossEl.style.display = "none";
@@ -237,8 +239,8 @@ export class Combat {
     e.model.hit();
     e.hitFlash = 0.2;
     if (e.kind !== "gloomking") {
-      e.pos.x += kx * 0.9;
-      e.pos.z += kz * 0.9;
+      e.pos.x += kx * 0.55;
+      e.pos.z += kz * 0.55;
       if (e.state === "windup" || e.state === "charge") {
         e.state = "recover";
         e.t = 0.6;
@@ -260,6 +262,8 @@ export class Combat {
     setTimeout(() => e.model.setEnabled(false), 500);
     if (e === this.boss) {
       this.bossEl.style.display = "none";
+      this.invuln = 0;
+      this.g.player.model.root.setEnabled(true);
       this.g.fx.confetti(at.add(new Vector3(0, 2, 0)), 60);
       this.onBossDefeated?.();
       this.boss = null;
@@ -354,8 +358,8 @@ export class Combat {
       this.slashMesh.rotation.y += dt * 9;
       if (this.slashT <= 0) this.slashMesh.setEnabled(false);
     }
-    // blink while invulnerable
-    p.model.root.setEnabled(!(this.invuln > 0 && Math.floor(this.invuln * 12) % 2 === 0));
+    // blink while invulnerable (always visible again once it wears off)
+    p.model.root.setEnabled(!(this.invuln > 0 && this.invuln < 1.4 && Math.floor(this.invuln * 12) % 2 === 0));
     if (this.shieldMesh?.isEnabled()) {
       this.shieldMesh.position.set(p.pos.x, p.pos.y + 0.8, p.pos.z);
       this.shieldMesh.scaling.setAll(1 + Math.sin(performance.now() / 200) * 0.04);

@@ -329,7 +329,7 @@ export function buildThornwild(scene: Scene, origin: Vector3): ThornwildDef {
       if (d < 0.15 || d > 0.85 || !isFree(lx, lz, 1.9)) continue;
       if (Math.hypot(lx - CAMP.x, lz - CAMP.z) < CAMP.r + 0.5 && r() < 0.6) continue;
       if (shroomSpots.some(([x, z]) => Math.hypot(x - lx, z - lz) < 2.6)) continue;
-      const hue: ShroomHue = r() < 0.48 ? "amber" : r() < 0.7 ? "magenta" : "violet";
+      const hue: ShroomHue = r() < 0.58 ? "amber" : "magenta";
       shroomSpots.push([lx, lz, hue, rand(0.8, 1.25)]);
       placed++;
     }
@@ -340,9 +340,9 @@ export function buildThornwild(scene: Scene, origin: Vector3): ThornwildDef {
     [19.0, 5.4, "magenta", 1.0], // flanking the boss gate
     [26.2, 5.0, "magenta", 0.95],
     [-30.0, 5.6, "amber", 0.85], // checkpoint 0
-    [-26.2, -19.4, "violet", 1.0], // arena 0
+    [-26.2, -19.4, "magenta", 1.0], // arena 0
     [-8.4, 23.4, "amber", 0.9], // arena 1
-    [13.4, 1.6, "violet", 0.9], // arena 2
+    [13.4, 1.6, "amber", 0.9], // arena 2
   ];
   for (const [x, z, h] of bigShrooms) pools.push([x, z, col(SHROOM_LIGHT[h]), 3.4, 0.85]);
 
@@ -351,7 +351,7 @@ export function buildThornwild(scene: Scene, origin: Vector3): ThornwildDef {
     GX1 = 54,
     GZ0 = -46,
     GZ1 = 48;
-  const ground = MeshBuilder.CreateGround("thornFloor", { width: GX1 - GX0, height: GZ1 - GZ0, subdivisions: 104, updatable: true }, scene);
+  const ground = MeshBuilder.CreateGround("thornFloor", { width: GX1 - GX0, height: GZ1 - GZ0, subdivisions: 92, updatable: true }, scene);
   ground.removeVerticesData(VertexBuffer.UVKind);
   let cGloom: Float32Array, cClean: Float32Array, cMix: Float32Array;
   {
@@ -361,15 +361,15 @@ export function buildThornwild(scene: Scene, origin: Vector3): ThornwildDef {
     cClean = new Float32Array(n * 4);
     cMix = new Float32Array(n * 4);
     const G = {
-      floor: col("#7c6b9e"),
-      floorIn: col("#9585b5"),
-      edge: col("#4a3c69"),
-      out: col("#2a2142"),
-      trail: col("#b4a3c6"),
-      stain: col("#54406f"),
-      camp: col("#b09ab8"),
-      ring: col("#a594c4"),
-      spill: col("#e9cfc8"),
+      floor: col("#6b7393"),
+      floorIn: col("#7d88a6"),
+      edge: col("#41466a"),
+      out: col("#262842"),
+      trail: col("#ab9fbe"),
+      stain: col("#4d4870"),
+      camp: col("#a898b2"),
+      ring: col("#a7b0cc"),
+      spill: col("#dcc8cc"),
     };
     const C = {
       floor: col("#a6dc8a"),
@@ -481,7 +481,8 @@ export function buildThornwild(scene: Scene, origin: Vector3): ThornwildDef {
       const h1 = Math.min(tall, 1.25 + rand(-0.2, 0.25));
       const base = jitterCol(pick(moundCols), 0.025, r);
       const bot = col("#8d8398");
-      const m1 = elb(scene, rad, h1 * 0.62, rad * rand(0.85, 1.0), { color: base, bottom: bot }, 6);
+      const back = d < -1.9;
+      const m1 = elb(scene, rad, h1 * 0.62, rad * rand(0.85, 1.0), { color: base, bottom: bot }, back ? 5 : 6);
       m1.position.set(ox + lx, oy + h1 * 0.38, oz + lz);
       bramble.add(m1);
       let topY = h1,
@@ -489,13 +490,13 @@ export function buildThornwild(scene: Scene, origin: Vector3): ThornwildDef {
         tz = lz,
         tr = rad;
       const surf: [number, number, number, number, number, number][] = [[lx, h1 * 0.38, lz, rad, h1 * 0.62, rad]];
-      if (tall > h1 + 0.35) {
+      if (tall > h1 + 0.35 && (!back || r() < 0.5)) {
         const h2 = tall - h1 * 0.55;
         const r2 = rad * rand(0.66, 0.82);
         tx = lx + rand(-0.2, 0.2) - dx * 0.25;
         tz = lz + rand(-0.2, 0.2) - dzz * 0.25;
         const cy = h1 * 0.6 + h2 * 0.42;
-        const m2 = elb(scene, r2, h2 * 0.55, r2, { color: base, bottom: Color3.Lerp(bot, base, 0.5) }, 6);
+        const m2 = elb(scene, r2, h2 * 0.55, r2, { color: base, bottom: Color3.Lerp(bot, base, 0.5) }, back ? 5 : 6);
         m2.position.set(ox + tx, oy + cy, oz + tz);
         bramble.add(m2);
         topY = cy + h2 * 0.55;
@@ -517,7 +518,7 @@ export function buildThornwild(scene: Scene, origin: Vector3): ThornwildDef {
             py = sy + uy * ry * 0.97,
             pz = sz + uz * rz * 0.97;
           if (py < 0.15) continue;
-          addThorn(ox + px, oy + py, oz + pz, ux / rx, uy / ry, uz / rz, rand(1.25, 1.85));
+          addThorn(ox + px, oy + py, oz + pz, ux / rx, uy / ry, uz / rz, rand(1.2, 1.8) * (1 - camSide * 0.25));
         }
       }
       // flowers waiting on top (shown when cleansed)
@@ -550,7 +551,7 @@ export function buildThornwild(scene: Scene, origin: Vector3): ThornwildDef {
         const q = (j / 6) * Math.PI * 1.6;
         pts.push(new Vector3(tip.x + Math.cos(a) * Math.sin(q) * cr, tip.y + (1 - Math.cos(q)) * cr * 0.9 - (j / 6) * 0.05, tip.z + Math.sin(a) * Math.sin(q) * cr));
       }
-      vines.add(tubeMesh(scene, pts, (u) => 0.065 * (1 - 0.75 * u), "#ffffff", "#c8bed4", 5));
+      vines.add(tubeMesh(scene, pts, (u) => 0.085 * (1 - 0.7 * u), "#ffffff", "#c8bed4", 5));
       const lf = elb(scene, 0.13, 0.03, 0.07, { color: "#f6f0ff" }, 5);
       const mid = pts[4];
       at(lf, mid.x + 0.06, mid.y, mid.z, [0.3, a, 0.4]);
@@ -567,7 +568,8 @@ export function buildThornwild(scene: Scene, origin: Vector3): ThornwildDef {
         for (let j = 0; j <= 8; j++) {
           const u = j / 8;
           const s = (u * 2 - 1) * half;
-          pts.push(new Vector3(ox + wf.x + Math.cos(ta) * s + wf.gx * 0.55 * Math.sin(u * Math.PI), oy + Math.sin(u * Math.PI) * H, oz + wf.z + Math.sin(ta) * s + wf.gz * 0.55 * Math.sin(u * Math.PI)));
+          const bulge = wf.r * (0.75 + 0.25 * Math.sin(u * Math.PI));
+          pts.push(new Vector3(ox + wf.x + Math.cos(ta) * s + wf.gx * bulge, oy + Math.sin(u * Math.PI) * H, oz + wf.z + Math.sin(ta) * s + wf.gz * bulge));
         }
         bramble.add(tubeMesh(scene, pts, (u) => 0.12 * (1 - 0.3 * Math.sin(u * Math.PI)), "#ffffff", "#b0a6bc", 6));
         for (const j of [2, 4, 6]) {
@@ -626,13 +628,13 @@ export function buildThornwild(scene: Scene, origin: Vector3): ThornwildDef {
         const h = Math.min(rand(1.6, 2.8), capM);
         if (h < 0.5) continue;
         if (h > 2.0 && r() < 0.6) {
-          const m = elb(scene, rr, Math.min(rr * 0.75, h * 0.5), rr, { color: jitterCol(pick(moundCols), 0.03, r), bottom: "#8f88a0" }, 6);
+          const m = elb(scene, rr, Math.min(rr * 0.75, h * 0.5), rr, { color: jitterCol(pick(moundCols), 0.03, r), bottom: "#8f88a0" }, d > -6 ? 6 : 5);
           m.position.set(ox + lx, oy + h - Math.min(rr * 0.75, h * 0.5), oz + lz);
           pick([canopyA, canopyB, canopyA]).add(m);
           // a hint of trunk under the canopy
           if (d > -6) bark.add(at(softCyl(scene, h * 0.6, 0.16, 0.24, { color: "#f0ecf4", bottom: "#b0a8bc" }, 0.04, 5), ox + lx, oy, oz + lz));
         } else {
-          const m = elb(scene, rr, h * 0.6, rr * 0.9, { color: jitterCol(pick(moundCols), 0.03, r), bottom: "#8d8398" }, 6);
+          const m = elb(scene, rr, h * 0.6, rr * 0.9, { color: jitterCol(pick(moundCols), 0.03, r), bottom: "#8d8398" }, 5);
           m.position.set(ox + lx, oy + h * 0.4, oz + lz);
           bramble.add(m);
         }
@@ -675,14 +677,16 @@ export function buildThornwild(scene: Scene, origin: Vector3): ThornwildDef {
     if (r() < 0.45) addFlower(lx + rand(-0.4, 0.4), oy, lz + rand(-0.4, 0.4), 0.95);
   }
   // cleansed flower meadow: arenas, boss clearing, path edges
-  for (let i = 0; i < 520; i++) {
+  for (let i = 0; i < 1500; i++) {
     const lx = rand(-30, 34),
       lz = rand(-35, 27);
     const d = sdf(lx, lz);
     if (d < 0.1) continue;
-    if (d > 1.4 && r() < 0.75) continue;
+    if (d > 1.6 && trailD(lx, lz) > 0.6 && r() < 0.8) continue; // keep the trails mostly clear
     if (!isFree(lx, lz, 0.6)) continue;
-    addFlower(lx, oy, lz, rand(0.85, 1.15));
+    // little clumps of 1–3
+    const n = 1 + Math.floor(r() * 3);
+    for (let j = 0; j < n; j++) addFlower(lx + rand(-0.35, 0.35), oy, lz + rand(-0.35, 0.35), rand(1.15, 1.6));
   }
   // glow shroom clusters
   for (const [x, z, h, s] of shroomSpots) addGloomShroom(scene, main, glow, ox + x, oy, oz + z, s, h, r);
@@ -726,7 +730,7 @@ export function buildThornwild(scene: Scene, origin: Vector3): ThornwildDef {
   colliders.push(addTent(scene, main, warm, ox + 3.4, oy, oz - 19.9, -0.5));
   colliders.push(...addLog(main, ox + 4.6, oz - 23.9, { y: oy, rotY: Math.PI / 2 + 0.2, length: 1.5, seed: 41 }));
   colliders.push(addStump(main, ox + 0.9, oz - 21.6, { y: oy, scale: 0.75, seed: 42 }));
-  colliders.push(addIconSign(scene, main, ox - 2.5, oy, oz - 27.8, 0.25, "gloomy"));
+  colliders.push(addIconSign(scene, main, ox - 2.5, oy, oz - 27.8, -0.15, "gloomy", true));
   addFlowerPatch(main, ox - 2.6, oz - 25.4, 0.7, { y: oy, palette: ["white", "butter", "pink"], density: 5, seed: 51 });
   addFlowerPatch(main, ox + 4.4, oz - 26.0, 0.7, { y: oy, palette: ["white", "lilac", "pink"], density: 5, seed: 52 });
   addFlowerPatch(main, ox - 1.9, oz - 33.8, 0.8, { y: oy, palette: ["white", "butter", "pink"], density: 5, seed: 53 });
@@ -786,12 +790,12 @@ export function buildThornwild(scene: Scene, origin: Vector3): ThornwildDef {
           scene,
           [
             [0, 0],
-            [1.75, 0],
-            [1.5, 0.18],
-            [1.28, 0.5],
-            [1.22, 1.05],
-            [1.3, 1.2],
-            [0, 1.22],
+            [2.0, 0],
+            [1.72, 0.2],
+            [1.46, 0.58],
+            [1.4, 1.2],
+            [1.5, 1.38],
+            [0, 1.4],
           ],
           { color: "#f0eaf6", bottom: "#9d94ad" },
           14,
@@ -803,14 +807,14 @@ export function buildThornwild(scene: Scene, origin: Vector3): ThornwildDef {
       ),
     );
     // hollow seat
-    bark.add(at(elb(scene, 0.95, 0.08, 0.85, { color: "#a89eb8" }, 8), tx, oy + 1.2, tz - 0.05));
-    gloomGlow.add(at(elb(scene, 0.7, 0.05, 0.6, { color: "#ff9ee6", bottom: "#c050b0" }, 8), tx, oy + 1.25, tz - 0.05));
+    bark.add(at(elb(scene, 1.1, 0.08, 1.0, { color: "#a89eb8" }, 8), tx, oy + 1.38, tz - 0.05));
+    gloomGlow.add(at(elb(scene, 0.82, 0.06, 0.72, { color: "#ff9ee6", bottom: "#c050b0" }, 8), tx, oy + 1.43, tz - 0.05));
     // crooked back spikes (behind the seat, curling tips)
     for (let i = 0; i < 5; i++) {
       const a = Math.PI * (0.2 + (i / 4) * 0.6); // arc on the north side
-      const bx = tx + Math.cos(a) * 0.95,
-        bz = tz + Math.sin(a) * 0.75;
-      const H = (i === 2 ? 3.3 : i % 2 ? 2.7 : 2.1) + rand(-0.15, 0.15);
+      const bx = tx + Math.cos(a) * 1.1,
+        bz = tz + Math.sin(a) * 0.85;
+      const H = (i === 2 ? 3.8 : i % 2 ? 3.1 : 2.4) + rand(-0.15, 0.15);
       const lean = (a - Math.PI / 2) * -0.6;
       const pts: Vector3[] = [];
       for (let j = 0; j <= 7; j++) {
@@ -822,24 +826,24 @@ export function buildThornwild(scene: Scene, origin: Vector3): ThornwildDef {
         const q = (j / 4) * Math.PI * 1.4;
         pts.push(new Vector3(tp.x + Math.sign(lean || 1) * Math.sin(q) * 0.22, tp.y + (1 - Math.cos(q)) * 0.2, tp.z - Math.sin(q) * 0.05));
       }
-      bark.add(tubeMesh(scene, pts, (u) => 0.26 * (1 - 0.82 * u), "#f4eef8", "#a49bb4", 7));
+      bark.add(tubeMesh(scene, pts, (u) => 0.3 * (1 - 0.82 * u), "#f4eef8", "#a49bb4", 7));
       for (const j of [2, 4, 6]) addThorn(pts[j].x, pts[j].y, pts[j].z - 0.15, rand(-0.4, 0.4), 0.25, -1, 1.1);
     }
     // roots spreading over the floor
     for (let i = 0; i < 7; i++) {
       const a = (i / 7) * TAU + 0.2;
       const m = elb(scene, 0.42, 0.22, 1.05, { color: "#e8e2ee", bottom: "#9d94ad" }, 6);
-      at(m, tx + Math.cos(a) * 1.75, oy + 0.06, tz + Math.sin(a) * 1.75, [0, Math.PI / 2 - a, 0]);
+      at(m, tx + Math.cos(a) * 2.0, oy + 0.06, tz + Math.sin(a) * 2.0, [0, Math.PI / 2 - a, 0]);
       bark.add(m);
     }
     // glowing cracks on the front
     for (let i = 0; i < 4; i++) {
       const a = -Math.PI / 2 + (i - 1.5) * 0.42;
       const m = elb(scene, 0.06, rand(0.2, 0.32), 0.04, { color: "#ffc8f0", bottom: "#e060c8" }, 5);
-      at(m, tx + Math.cos(a) * 1.3, oy + rand(0.45, 0.8), tz + Math.sin(a) * 1.3, [0, Math.PI / 2 - a, rand(-0.4, 0.4)]);
+      at(m, tx + Math.cos(a) * 1.48, oy + rand(0.5, 0.95), tz + Math.sin(a) * 1.48, [0, Math.PI / 2 - a, rand(-0.4, 0.4)]);
       gloomGlow.add(m);
     }
-    colliders.push({ kind: "circle", x: tx, z: tz, r: 1.75 });
+    colliders.push({ kind: "circle", x: tx, z: tz, r: 1.95 });
     colliders.push({ kind: "circle", x: tx - 1.6, z: tz + 0.6, r: 0.8 }, { kind: "circle", x: tx + 1.6, z: tz + 0.6, r: 0.8 });
     // treasure dais
     const [qx, qz] = SPOTS.treasure;
@@ -904,12 +908,12 @@ export function buildThornwild(scene: Scene, origin: Vector3): ThornwildDef {
 
   // ------------------------------------------------------------------ build batches
   const tint = {
-    bramble: [col("#836a8e"), col("#86cf78")],
-    vines: [col("#7f9aa6"), col("#9fdc84")],
+    bramble: [col("#6e5a7c"), col("#86cf78")],
+    vines: [col("#86aaa8"), col("#9fdc84")],
     bark: [col("#9a8fae"), col("#d9b08a")],
-    canopyA: [col("#4d5a88"), col("#a8e08e")],
-    canopyB: [col("#5f4f86"), col("#ffc2d8")],
-    thorn: [col("#fbe6ef"), col("#c9f0b0")],
+    canopyA: [col("#434d7c"), col("#a8e08e")],
+    canopyB: [col("#544578"), col("#ffc2d8")],
+    thorn: [col("#fff1e6"), col("#c9f0b0")],
   } as const;
   const tm = (name: string, o: { rim?: number; wind?: number; emissive?: string } = {}) => {
     const m = toonMat(scene, { name, rim: o.rim ?? 0.22, wind: o.wind, emissive: o.emissive });
@@ -921,8 +925,8 @@ export function buildThornwild(scene: Scene, origin: Vector3): ThornwildDef {
     bark: tm("thornBarkMat", { rim: 0.25 }),
     canopyA: tm("thornCanopyAMat", { rim: 0.32 }),
     canopyB: tm("thornCanopyBMat", { rim: 0.32 }),
-    thorn: tm("thornThornMat", { rim: 0.3 }),
-    glow: tm("thornGlowMat", { emissive: "#c8c8c8", rim: 0.35 }),
+    thorn: tm("thornThornMat", { rim: 0.3, emissive: "#3a2c34" }),
+    glow: tm("thornGlowMat", { emissive: "#b8b8b8", rim: 0.35 }),
     warm: tm("thornWarmMat", { emissive: "#d8d8d8", rim: 0.3 }),
     gloomGlow: tm("thornGloomGlowMat", { emissive: "#e0e0e0", rim: 0.3 }),
     flame: tm("thornFlameMat", { emissive: "#f0f0f0", rim: 0.2 }),
@@ -972,17 +976,17 @@ export function buildThornwild(scene: Scene, origin: Vector3): ThornwildDef {
   // ------------------------------------------------------------------ mist (thin instances, alpha)
   const mistItems: InstItem[] = [];
   {
-    const addMist = (lx: number, lz: number, s: number) => mistItems.push({ x: ox + lx, y: oy + rand(0.1, 0.35), z: oz + lz, q: Quaternion.FromEulerAngles(0, rand(0, TAU), 0), s, sy: rand(0.8, 1.2), k: r() });
+    const addMist = (lx: number, lz: number, s: number) => mistItems.push({ x: ox + lx, y: oy + rand(0.02, 0.2), z: oz + lz, q: Quaternion.FromEulerAngles(0, rand(-0.5, 0.5), 0), s: s * 0.9, sy: rand(0.8, 1.2), k: r() });
     for (const a of [...ARENAS, { x: BOSS.x, z: BOSS.z, r: BOSS.r }]) {
-      const n = a.r > 8 ? 12 : 6;
+      const n = a.r > 8 ? 9 : 4;
       for (let i = 0; i < n; i++) {
-        const t = rand(0, TAU),
-          d = rand(0.3, 0.95) * (a.r - 1.5);
-        addMist(a.x + Math.cos(t) * d, a.z + Math.sin(t) * d, rand(1.6, 2.6));
+        const t = (i / n) * TAU + rand(-0.3, 0.3),
+          d = rand(0.55, 1.0) * (a.r - 1.2);
+        addMist(a.x + Math.cos(t) * d, a.z + Math.sin(t) * d, rand(1.4, 2.2));
       }
     }
     let tries = 0;
-    while (mistItems.length < 58 && tries++ < 800) {
+    while (mistItems.length < 50 && tries++ < 800) {
       const lx = rand(-29, 33),
         lz = rand(-28, 26);
       const d = sdf(lx, lz);
@@ -990,9 +994,20 @@ export function buildThornwild(scene: Scene, origin: Vector3): ThornwildDef {
       addMist(lx, lz, rand(1.3, 2.2));
     }
   }
-  const mistM = elb(scene, 1, 0.24, 1, { color: "#ffffff", bottom: "#d8cdea", name: "thornMist" }, 7);
-  const mistMat = toonMat(scene, { name: "thornMistMat", emissive: "#5c4c84", rim: 0, alpha: 0.3 });
-  mistMat.diffuseColor = col("#9c86c8");
+  const mistM = elb(scene, 1.5, 0.3, 0.85, { color: "#ffffff", name: "thornMist" }, 10);
+  {
+    // soft edges: vertex alpha fades to 0 toward the equator
+    const p = mistM.getVerticesData(VertexBuffer.PositionKind)!;
+    const c = mistM.getVerticesData(VertexBuffer.ColorKind)!;
+    for (let i = 0; i < p.length / 3; i++) {
+      const yy = Math.max(0, p[i * 3 + 1] / 0.3);
+      c[i * 4 + 3] = Math.pow(yy, 1.6);
+    }
+    mistM.setVerticesData(VertexBuffer.ColorKind, c, false, 4);
+    mistM.hasVertexAlpha = true;
+  }
+  const mistMat = toonMat(scene, { name: "thornMistMat", emissive: "#6a5c94", rim: 0, alpha: 0.3 });
+  mistMat.diffuseColor = col("#b4a2dc");
   mistMat.disableDepthWrite = true;
   const mist = new InstSet(mistM, mistItems, false);
   finishMesh(mistM, scene, { material: mistMat, outline: false, castShadow: false, receiveShadow: false });
@@ -1068,7 +1083,7 @@ export function buildThornwild(scene: Scene, origin: Vector3): ThornwildDef {
   const spawn = W(SPAWN[0], SPAWN[1]);
 
   let cleanF = -1;
-  const baseGlow = new Color3(0.78, 0.78, 0.78);
+  const baseGlow = new Color3(0.7, 0.7, 0.7);
   const gloomCrack = col("#ffffff"),
     cleanCrack = col("#fff0a0");
   const cleanse = (fIn: number) => {

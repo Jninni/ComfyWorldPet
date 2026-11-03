@@ -207,14 +207,14 @@ export function grumpyFace(scene: Scene, f: GrumpySpec): { eyes: Mesh[]; flat: M
     const dy = f.eyeW / R,
       dp = f.eyeH / R;
     // glowing almond, tilted so the inner corner dips (glare)
-    eyes.push(decal(scene, H, yaw, f.eyePitch, [f.eyeW, f.eyeH, f.eyeW * 0.5], f.glow, 0.42, -s * 0.32, 9));
+    eyes.push(decal(scene, H, yaw, f.eyePitch, [f.eyeW, f.eyeH, f.eyeW * 0.5], f.glow, 0.42, -s * 0.32, 8));
     // pupil: dark, pushed inward/down, plus a tiny white glint
     const pk = f.pupil ?? 0.5;
     if (pk > 0) {
       const pp = surf(H, yaw - s * dy * 0.22, f.eyePitch - dp * 0.12, f.eyeW * 0.2);
-      eyes.push(blobM(scene, [f.eyeW * 0.42 * pk * 2, f.eyeH * 0.55 * pk * 2, f.eyeW * 0.18], pp.p, "#2a1236", rotZTo(pp.n), undefined, 6));
+      eyes.push(blobM(scene, [f.eyeW * 0.42 * pk * 2, f.eyeH * 0.55 * pk * 2, f.eyeW * 0.18], pp.p, "#2a1236", rotZTo(pp.n), undefined, 5));
       const gp = surf(H, yaw - s * dy * 0.05 + dy * 0.12, f.eyePitch + dp * 0.12, f.eyeW * 0.34);
-      eyes.push(ballM(scene, f.eyeW * 0.16, gp.p, "#ffffff", undefined, 5));
+      eyes.push(ballM(scene, f.eyeW * 0.16, gp.p, "#ffffff", undefined, 3));
     }
     // heavy brow slanting down toward the middle, overlapping the eye's top-inner edge
     const lift = f.browLift ?? 0.55;

@@ -265,7 +265,17 @@ export function buildThornGate(scene: Scene, pos: Vector3, rotY: number): ThornG
     addGloomShroom(scene, shroomStems, glow, 3.0, 0, -0.8, 0.9, "magenta", r);
     addGloomShroom(scene, shroomStems, glow, 4.4, 0, -0.2, 0.8, "amber", r);
     addGloomShroom(scene, shroomStems, glow, -5.2, 0, 0.6, 0.85, "magenta", r);
-    colliders.push(toWorld(addIconSign(scene, shroomStems, -3.6, 0, -1.9, 0.3, "warning")));
+    const signB = new Batch(scene, "thornGateSign");
+    colliders.push(toWorld(addIconSign(scene, signB, -3.7, 0, -2.0, 0.3, "warning")));
+    const sm = signB.build({ outline: 0.035 });
+    if (sm) {
+      // the sign is built at 1x; scale it up around its post so it reads from the overworld camera
+      sm.bakeCurrentTransformIntoVertices();
+      sm.setPivotPoint(new Vector3(-3.7, 0, -2.0));
+      sm.scaling.setAll(1.35);
+      sm.parent = root;
+      sm.isPickable = false;
+    }
   }
 
   // ------------------------------------------------------------------ barrier (two halves that retract into the pillars)
@@ -278,29 +288,40 @@ export function buildThornGate(scene: Scene, pos: Vector3, rotY: number): ThornG
     node.position.set(sx * (RX - 0.1), 0, -0.42);
     const vb = new Batch(scene, "thornGateBarrierVines");
     const tb = new Batch(scene, "thornGateBarrierThorns");
-    const heights = [0.45, 1.1, 1.75, 2.4, 3.05];
-    heights.forEach((h, k) => {
+    // woven lattice: strands run diagonally up / down from the pillar and cross the opening's centre line
+    const strands: [number, number][] = [
+      [0.35, 1.35],
+      [1.05, 0.25],
+      [1.45, 2.55],
+      [2.25, 1.2],
+      [2.6, 3.45],
+      [3.25, 2.3],
+    ];
+    strands.forEach(([h0, h1], k) => {
       const pts: Vector3[] = [];
-      const L = RX + 0.25;
+      const L = RX + 0.3;
       const M = 12;
       for (let j = 0; j <= M; j++) {
         const u = j / M;
         const lx = -sx * u * L;
-        const y = h + (k % 2 ? 0.45 : -0.3) * u + Math.sin(u * Math.PI * 2 + k) * 0.08;
-        pts.push(new Vector3(lx, Math.min(y, 3.65), Math.sin(u * Math.PI * 3 + k * 1.7) * 0.09));
+        const y = h0 + (h1 - h0) * u + Math.sin(u * Math.PI * 2 + k) * 0.06;
+        pts.push(new Vector3(lx, Math.min(y, 3.6), Math.sin(u * Math.PI * 3 + k * 1.7) * 0.08 + (k % 2 ? -0.06 : 0.06)));
       }
-      // curl at the inner end
       const e = pts[M];
-      for (let j = 1; j <= 4; j++) {
-        const q = (j / 4) * Math.PI * 1.4;
-        pts.push(new Vector3(e.x - sx * Math.sin(q) * 0.18, e.y + (1 - Math.cos(q)) * 0.16 * (k % 2 ? -1 : 1), e.z));
+      const up = h1 > h0 ? 1 : -1;
+      for (let j = 1; j <= 5; j++) {
+        const q = (j / 5) * Math.PI * 1.5;
+        pts.push(new Vector3(e.x - sx * Math.sin(q) * 0.2, e.y + (1 - Math.cos(q)) * 0.17 * up, e.z));
       }
-      vb.add(tubeMesh(scene, pts, (u) => 0.12 * (1 - 0.55 * u), "#9a7abd", "#6b4f8f", 6));
-      for (let j = 1; j < M; j += 2) {
+      vb.add(tubeMesh(scene, pts, (u) => 0.11 * (1 - 0.5 * u), "#9a7abd", "#6b4f8f", 6));
+      for (let j = 2; j < M; j += 3) {
         const p = pts[j];
-        const up = j % 4 === 1 ? 1 : -1;
-        thorn(tb, p.x, p.y, p.z - 0.06, 0, up * 0.7, -1, rand(1.0, 1.35));
+        const a = rand(0, TAU);
+        thorn(tb, p.x, p.y, p.z - 0.05, Math.cos(a) * 0.8, Math.sin(a) * 0.8, -0.7, rand(0.85, 1.2));
       }
+      // a leaf or two so it reads as a living vine
+      const lp = pts[Math.floor(M * 0.45)];
+      vb.add(at(elb(scene, 0.13, 0.03, 0.07, { color: "#a98ccc" }, 5), lp.x, lp.y + 0.08, lp.z - 0.08, [0.6, 0, sx * 0.4]));
     });
     const vm = vb.build({ material: barrierMat, outline: 0.04 });
     const tm = tb.build({ material: thornMat, outline: 0.03 });

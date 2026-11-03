@@ -232,25 +232,61 @@ export function weldNormals(pos: ArrayLike<number>, nrm: number[]) {
 
 /**
  * An ellipsoid reshaped like a heraldic "heater" shield seen from above: broad, squarish front (+Z),
- * sides that taper to a soft point at the back, and a flattened underside. Used for the turtle's shell.
- * `under` squashes the lower half (0..1).
+ * sides that curve to a soft point at the back, and a flattened underside. Used for the turtle's shell.
+ * `point` = how far the back point reaches (in radii); `under` squashes the lower half (0..1).
  */
-export function shieldDome(scene: Scene, r: V3, pos: V3, color: ColorLike, bottom?: ColorLike, taper = 0.5, under = 0.3, seg = 18): Mesh {
+/** Polar radius of the heater-shield outline along horizontal direction (dx, dz) (unit circle → shield). */
+export function shieldRadius(dx: number, dz: number, point: number): number {
+  if (dz >= 0) {
+    // front half: a squircle → broad, squarish top edge of the shield
+    const t = 1 / Math.pow(Math.pow(Math.abs(dx), 4) + Math.pow(dz, 4), 0.25);
+    return 1 + (t - 1) * 0.7;
+  }
+  // back half: two circular arcs from the sides (±1, 0) meeting in a soft point at (0, -point)
+  const RR = (point * point + 1) / 2;
+  const cx = dx >= 0 ? 1 - RR : RR - 1;
+  const dc = dx * cx;
+  const t = dc + Math.sqrt(Math.max(0, dc * dc - cx * cx + RR * RR));
+  // round off the very tip a little
+  return Math.min(t, point * (0.92 + 0.08 * Math.abs(dz)));
+}
+
+/** Points on a shieldDome's surface at fraction `k` (0 centre … 1 rim) of the way out, e.g. for a border. */
+export function shieldRing(r: V3, pos: V3, point: number, k: number, n = 40, lift = 0): V3[] {
+  const out: V3[] = [];
+  const y = Math.sqrt(Math.max(0, 1 - k * k));
+  for (let i = 0; i <= n; i++) {
+    const a = (i / n) * Math.PI * 2;
+    const dx = Math.sin(a),
+      dz = Math.cos(a);
+    const t = shieldRadius(dx, dz, point) * k;
+    out.push([pos[0] + dx * t * r[0], pos[1] + y * r[1] + lift, pos[2] + dz * t * r[2]]);
+  }
+  return out;
+}
+
+export function shieldDome(scene: Scene, r: V3, pos: V3, color: ColorLike, bottom?: ColorLike, point = 1.25, under = 0.3, seg = 18): Mesh {
   const m = MeshBuilder.CreateSphere("shield", { diameter: 2, segments: seg }, scene);
   const p = m.getVerticesData(VertexBuffer.PositionKind)!;
   const out = new Float32Array(p.length);
   for (let i = 0; i < p.length; i += 3) {
-    let x = p[i],
-      y = p[i + 1],
+    const x = p[i],
       z = p[i + 2];
-    if (z < 0) x *= 1 - taper * Math.pow(-z, 1.6);
-    else x *= 1 + 0.12 * z;
-    // squarer front edge
-    if (z > 0) z *= 1 - 0.18 * x * x;
+    let y = p[i + 1];
+    const rho = Math.hypot(x, z);
+    let sx = x,
+      sz = z;
+    if (rho > 1e-5) {
+      const dx = x / rho,
+        dz = z / rho;
+      const t = shieldRadius(dx, dz, point);
+      sx = dx * rho * t;
+      sz = dz * rho * t;
+    }
     if (y < 0) y *= under;
-    out[i] = x * r[0];
+    out[i] = sx * r[0];
     out[i + 1] = y * r[1];
-    out[i + 2] = z * r[2];
+    out[i + 2] = sz * r[2];
   }
   const idx = m.getIndices()!;
   const nrm: number[] = [];

@@ -1256,7 +1256,7 @@ body.touch .dialogue {
 .boss-hud {
   position: absolute;
   left: 50%;
-  bottom: calc(24px + var(--safe-b));
+  bottom: calc(96px + var(--safe-b));
   transform: translateX(-50%);
   width: min(520px, 70vw);
   text-align: center;

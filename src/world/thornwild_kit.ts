@@ -174,8 +174,8 @@ export function thornMesh(scene: Scene, name = "thorn"): Mesh {
       [0.012, 0.268],
       [0, 0.275],
     ],
-    { color: "#fff6fb", bottom: "#d3b2de", name },
-    6,
+    { color: "#ffffff", bottom: "#d9ccd2", name },
+    8,
   );
   return m;
 }
@@ -548,27 +548,27 @@ function gloomyIcon(p: Placer, b: Batch, lx: number, ly: number, lz: number, s: 
 export type SignKind = "gloomy" | "warning" | "home";
 
 /** Wooden signpost with icon boards (gloomy arrow, warning triangle, or home heart). Front faces local -Z. */
-export function addIconSign(scene: Scene, b: Batch, x: number, y: number, z: number, rotY: number, kind: SignKind): Collider {
+export function addIconSign(scene: Scene, b: Batch, x: number, y: number, z: number, rotY: number, kind: SignKind, pointLeft = false): Collider {
   const p = new Placer(scene, x, y, z, rotY);
   p.put(b, rbox(scene, 0.13, 1.45, 0.13, { color: "#c99a6b", bottom: "#8f6a4a" }, 0.05), [0, 0.72, 0.03]);
   p.put(b, elb(scene, 0.2, 0.08, 0.18, { color: "#8a7aa0", bottom: "#5e5076" }, 6), [0, 0.03, 0.03]);
   if (kind === "warning") {
     // triangle board (rounded) with a plum "!"
-    const tri = softCyl(scene, 0.08, 0.5, 0.5, { color: "#fff0a8", bottom: "#f5cf6b" }, 0.04, 3);
-    p.put(b, tri, [0, 1.25, -0.05], [-Math.PI / 2, 0, Math.PI / 2 + Math.PI / 6 + Math.PI / 3]);
-    const rim = softCyl(scene, 0.06, 0.58, 0.58, { color: "#ef8fab", bottom: "#d97a9c" }, 0.03, 3);
-    p.put(b, rim, [0, 1.25, -0.0], [-Math.PI / 2, 0, Math.PI / 2 + Math.PI / 6 + Math.PI / 3]);
+    const tri = spunTri(scene, 0.08, 0.5, "#fff0a8", "#f5cf6b", TRI_UP);
+    p.put(b, tri, [0, 1.25, -0.05], [-Math.PI / 2, 0, 0]);
+    const rim = spunTri(scene, 0.06, 0.6, "#ef8fab", "#d97a9c", TRI_UP);
+    p.put(b, rim, [0, 1.25, -0.0], [-Math.PI / 2, 0, 0]);
     p.put(b, rbox(scene, 0.07, 0.24, 0.03, { color: "#5b3f86" }, 0.03), [0, 1.3, -0.14]);
     p.put(b, elb(scene, 0.045, 0.045, 0.02, { color: "#5b3f86" }, 5), [0, 1.12, -0.14]);
     // round board below with the gloomy face
     p.put(b, softCyl(scene, 0.07, 0.27, 0.27, { color: "#f3e6ff", bottom: "#d8c4f0" }, 0.03, 14), [0, 0.68, -0.05], [-Math.PI / 2, 0, 0]);
     gloomyIcon(p, b, 0, 0.68, -0.13, 1.05);
   } else {
-    const dir = kind === "home" ? -1 : 1;
+    const dir = pointLeft ? -1 : 1;
     const bc = kind === "home" ? ["#fff6e6", "#f2d7b4"] : ["#f2d7b4", "#e8c49a"];
     p.put(b, rbox(scene, 0.95, 0.42, 0.09, { color: bc[0], bottom: bc[1] }, 0.07), [dir * 0.18, 1.12, -0.06]);
-    const tip = softCyl(scene, 0.09, 0.27, 0.27, { color: bc[0], bottom: bc[1] }, 0.03, 3);
-    p.put(b, tip, [dir * 0.66, 1.12, -0.06], [-Math.PI / 2, 0, dir > 0 ? Math.PI / 2 + Math.PI / 6 + Math.PI : Math.PI / 2 + Math.PI / 6]);
+    const tip = spunTri(scene, 0.09, 0.27, bc[0], bc[1], dir > 0 ? 0 : Math.PI);
+    p.put(b, tip, [dir * 0.6, 1.12, -0.06], [-Math.PI / 2, 0, 0]);
     if (kind === "gloomy") gloomyIcon(p, b, dir * 0.12, 1.12, -0.12, 0.95);
     else {
       for (const sx of [-1, 1]) p.put(b, elb(scene, 0.07, 0.07, 0.025, { color: "#f47a9a" }, 6), [dir * 0.18 + sx * 0.055, 1.15, -0.12]);
@@ -577,6 +577,17 @@ export function addIconSign(scene: Scene, b: Batch, x: number, y: number, z: num
   }
   p.put(b, elb(scene, 0.08, 0.08, 0.08, { color: "#f8b9cb", bottom: "#ef8fab" }, 6), [0, 1.48, 0.03]);
   return p.circle(0, 0.02, 0.28);
+}
+
+/** spin (around Y) that makes a tess-3 disc point a vertex "up" after a -π/2 pitch */
+const TRI_UP = -Math.PI / 2;
+/** Rounded triangular plate lying in XZ, spun in-plane by `spin` (baked) so a later pitch keeps the orientation. */
+function spunTri(scene: Scene, thick: number, r: number, top: string, bottom: string, spin: number): Mesh {
+  const m = softCyl(scene, thick, r, r, { color: top, bottom }, Math.min(0.04, thick / 2), 3);
+  m.rotation.y = spin;
+  m.bakeCurrentTransformIntoVertices();
+  m.rotation.y = 0;
+  return m;
 }
 
 /** Cosy little A-frame tent (striped pastel canvas). Front (opening) faces local -Z. */

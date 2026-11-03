@@ -15,7 +15,7 @@ import type { SpeciesId } from "../data/species";
 import { rng } from "../render/Palette";
 import { toonMat } from "../render/Toon";
 import { lathe, type V3 } from "../render/Shapes";
-import { Kit, ballM, blobM, softConeM, puffStar, capOn, decal, surf, arcOn, rotZTo, rotYTo, add, norm, heartM, shieldDome, spiralHorn, buildHeads, type Ell, type FaceSpec } from "./critterParts";
+import { Kit, ballM, blobM, softConeM, puffStar, tubeM, capOn, decal, surf, arcOn, rotZTo, rotYTo, add, norm, heartM, shieldDome, shieldRing, spiralHorn, buildHeads, type Ell, type FaceSpec } from "./critterParts";
 
 export interface CritterAnimState {
   speed: number; // 0..1 normalized move speed
@@ -1632,17 +1632,17 @@ function buildEquine(c: Ctx, uni: boolean): Critter {
   const P = uni
     ? R
       ? { coat: "#d3cdf7", coatB: "#b9b0ec", belly: "#ece8ff", muzzle: "#f1eeff", inner: "#f4c4e4", nose: "#8f7bc4", hoof: "#f2eaff", hoofB: "#cbbcf2", sock: "#f4f1ff",
-          mane: ["#7fd6e8", "#b7a2f2", "#f3f0ff", "#8fb8f6", "#d9b2f4", "#a6ece0"], blanket: "#8fb8f6", trim: "#f3f0ff", emblem: "#fff1a8",
+          mane: ["#7fd6e8", "#b7a2f2", "#f3f0ff", "#8fb8f6", "#d9b2f4", "#a6ece0"], blanket: "#8fb8f6", pad: "#d9b2f4", trim: "#f3f0ff", emblem: "#fff1a8",
           horn: "#eefaff", hornB: "#bfe9ff", hornE: "#6cb8dc", star: "#fff1a8", glint: "#ffffff" }
       : { coat: "#fbf7ff", coatB: "#e9dffb", belly: "#ffffff", muzzle: "#fff7fb", inner: "#ffc6dc", nose: "#c9a6d8", hoof: "#fff3c8", hoofB: "#f3d9a0", sock: "#ffffff",
-          mane: ["#ffb3cf", "#ffd2a6", "#fff0a6", "#bdeed2", "#b6dcff", "#d4c0ff"], blanket: "#d4c0ff", trim: "#fff6e6", emblem: "#ffb3cf",
+          mane: ["#ffb3cf", "#ffd2a6", "#fff0a6", "#bdeed2", "#b6dcff", "#d4c0ff"], blanket: "#d4c0ff", pad: "#ffd0e4", trim: "#fff6e6", emblem: "#ffb3cf",
           horn: "#fff2c2", hornB: "#ffcf86", hornE: "#dcb35a", star: "#ffd1e8", glint: "#ffffff" }
     : R
       ? { coat: "#ffd4df", coatB: "#f6b5c6", belly: "#fff0f3", muzzle: "#fff3f2", inner: "#ffb6c8", nose: "#c97b8f", hoof: "#c98a96", hoofB: "#ad6f7e", sock: "#fffaf2",
-          mane: ["#fff7e6", "#ffe39a", "#fff7e6", "#ffd27a"], blanket: "#bfe9d6", trim: "#fffaf2", emblem: "#ff8fb0",
+          mane: ["#fff7e6", "#ffe39a", "#fffbf0", "#ffd27a"], blanket: "#bfe9d6", pad: "#ffe7a0", trim: "#fffaf2", emblem: "#ff8fb0",
           horn: "", hornB: "", hornE: "", star: "", glint: "#ffffff" }
       : { coat: "#fbe1c6", coatB: "#f0c59f", belly: "#fff3e3", muzzle: "#fff5ea", inner: "#ffbfcf", nose: "#b9806c", hoof: "#b98370", hoofB: "#9c6a5a", sock: "#fffaf0",
-          mane: ["#ffb7d0", "#d2bdf7", "#ffcadb", "#c3aef0"], blanket: "#b6dcf7", trim: "#fff6e6", emblem: "#ff8fb0",
+          mane: ["#ffb7d0", "#d2bdf7", "#ffc6d8", "#c3aef0"], blanket: "#b6dcf7", pad: "#ffc2d6", trim: "#fff6e6", emblem: "#ff8fb0",
           horn: "", hornB: "", hornE: "", star: "", glint: "#ffffff" };
   const mane = (i: number) => P.mane[((i % P.mane.length) + P.mane.length) % P.mane.length];
   const { scene: s, k } = c;
@@ -1659,7 +1659,7 @@ function buildEquine(c: Ctx, uni: boolean): Critter {
   // saddle blanket: scalloped trim, coloured cloth, puffy seat pad, heart on each side
   body.push(capOn(s, BE, 0, Math.PI / 2, 0.76, P.trim, { sx: 1.45, sy: 0.82, lift: 0.005, wob: 0.06, seed: 2, segs: 40 }));
   body.push(capOn(s, BE, 0, Math.PI / 2, 0.68, P.blanket, { sx: 1.45, sy: 0.8, lift: 0.011, segs: 40 }));
-  body.push(blobM(s, [0.17, 0.05, 0.17], [0, SEAT - 0.025, -0.04], P.trim, undefined, P.blanket, 12));
+  body.push(blobM(s, [0.17, 0.05, 0.17], [0, SEAT - 0.025, -0.04], P.pad, undefined, P.trim, 12));
   for (const sd of [-1, 1]) {
     const hp = surf(BE, sd * Math.PI * 0.5, 0.3, 0.016);
     body.push(heartM(s, 0.07, 0.018, hp.p, P.emblem, rotZTo(hp.n)));
@@ -1673,10 +1673,11 @@ function buildEquine(c: Ctx, uni: boolean): Critter {
     const u = i / (NM - 1);
     const p = qbez(mA, mC, mB, u);
     const r = 0.1 - 0.03 * u;
-    body.push(ballM(s, r, p, mane(i), undefined, 10));
+    // pony: soft lengthwise two-tone crest; unicorn: rainbow bands
+    body.push(ballM(s, r, p, uni ? mane(i) : mane((i % 2) * 2), undefined, 10));
     // side fluff so the crest reads from every angle (the unicorn's mane flows down further)
     for (const sd of [-1, 1]) {
-      body.push(ballM(s, r * 0.82, add(p, [sd * 0.075, -0.06, 0.03]), mane(i + 1), undefined, 8));
+      body.push(ballM(s, r * 0.82, add(p, [sd * 0.075, -0.06, 0.03]), uni ? mane(i + 1) : mane(1 + (i % 2) * 2), undefined, 8));
       if (uni && i > 0 && i < NM - 1) body.push(ballM(s, r * 0.7, add(p, [sd * 0.11, -0.14, 0.05]), mane(i + 2), undefined, 8));
     }
   }
@@ -1783,8 +1784,8 @@ function buildEquine(c: Ctx, uni: boolean): Critter {
     const u = i / (NT - 1);
     const p: V3 = [Math.sin(u * 2.4) * 0.035, 0.83 - 0.36 * TL * u - 0.06 * u * u, -0.52 - 0.2 * TL * Math.sin(u * 1.9) + 0.02 * u];
     const r = 0.065 + 0.055 * Math.sin(Math.min(1, u * 1.1) * Math.PI * 0.82);
-    tail.push(ballM(s, r, p, mane(i), undefined, 10));
-    if (i > 2) tail.push(ballM(s, r * 0.7, add(p, [(i % 2 ? 1 : -1) * r * 0.6, 0.01, -r * 0.3]), mane(i + 1), undefined, 8));
+    tail.push(ballM(s, r, p, uni ? mane(i) : mane((i % 2) * 2), undefined, 10));
+    if (i > 2) tail.push(ballM(s, r * 0.7, add(p, [(i % 2 ? 1 : -1) * r * 0.6, 0.01, -r * 0.3]), uni ? mane(i + 1) : mane(1 + (i % 2) * 2), undefined, 8));
   }
   k.part("tailMesh", tn, tp, tail);
   const tails: Tail[] = [{ n: tn, amp: 0.2, f: 1.8, walk: 0.18, gain: 0.35, curlY: 0.9, curlX: 0.15, axis: "y" }];
@@ -1885,7 +1886,7 @@ function buildEmberling(c: Ctx): Critter {
     eyePitch: 0.13,
     eyeW: 0.04,
     eyeH: 0.053,
-    mouth: { ell: MU, pitch: -0.4, w: 0.026, h: 0.014, style: "w" },
+    mouth: { ell: MU, pitch: -0.12, w: 0.02, h: 0.011, style: "w" },
     fang: true,
   });
   // warm glowing cheeks (emissive, outside the outline)
@@ -1909,14 +1910,14 @@ function buildEmberling(c: Ctx): Critter {
   for (const sd of [-1, 1]) {
     const piv: V3 = [sd * 0.1, 0.36, -0.15];
     const wn = k.node("wing" + sd, c.base, piv);
-    const rot: V3 = [0.15, -sd * 0.55, sd * 0.35];
-    const ctr = add(piv, rotDir(rot, [sd * 0.1, 0.02, 0]));
+    const rot: V3 = [0.1, -sd * 0.45, sd * 0.45];
+    const ctr = add(piv, rotDir(rot, [sd * 0.13, 0.03, 0]));
     const wm: Mesh[] = [
-      blobM(s, [0.11, 0.075, 0.016], ctr, P.wing, rot, undefined, 10),
-      blobM(s, [0.075, 0.048, 0.012], add(ctr, rotDir(rot, [sd * 0.005, -0.01, 0.008])), P.wingIn, rot, undefined, 10),
-      blobM(s, [0.05, 0.035, 0.014], add(ctr, rotDir(rot, [sd * 0.06, -0.055, 0])), P.wing, [rot[0], rot[1], rot[2] + sd * 0.4], undefined, 8),
-      blobM(s, [0.05, 0.035, 0.014], add(ctr, rotDir(rot, [-sd * 0.02, -0.06, 0])), P.wing, [rot[0], rot[1], rot[2] - sd * 0.2], undefined, 8),
-      ballM(s, 0.022, add(ctr, rotDir(rot, [sd * 0.1, 0.05, 0])), P.spike, undefined, 6),
+      blobM(s, [0.135, 0.09, 0.018], ctr, P.wing, rot, undefined, 10),
+      blobM(s, [0.095, 0.06, 0.013], add(ctr, rotDir(rot, [sd * 0.008, -0.012, 0.01])), P.wingIn, rot, undefined, 10),
+      blobM(s, [0.06, 0.042, 0.016], add(ctr, rotDir(rot, [sd * 0.075, -0.065, 0])), P.wing, [rot[0], rot[1], rot[2] + sd * 0.4], undefined, 8),
+      blobM(s, [0.06, 0.042, 0.016], add(ctr, rotDir(rot, [-sd * 0.025, -0.072, 0])), P.wing, [rot[0], rot[1], rot[2] - sd * 0.2], undefined, 8),
+      ballM(s, 0.026, add(ctr, rotDir(rot, [sd * 0.125, 0.06, 0])), P.spike, undefined, 6),
     ];
     k.part("wingMesh" + sd, wn, piv, wm, { outline: 0.014 });
     wings.push({ n: wn, side: sd, rest: 0.15, amp: 0.8, kind: "bird" });
@@ -2062,7 +2063,7 @@ function buildRoarlet(c: Ctx): Critter {
     cheekPitch: -0.14,
     cheekR: 0.032,
     nose: { ell: MU, pitch: 0.5, r: 0.026, color: P.nose, w: 1.4 },
-    mouth: { ell: MU, pitch: 0.0, w: 0.024, h: 0.013, style: "w" },
+    mouth: { ell: MU, pitch: 0.0, w: 0.021, h: 0.012, style: "w" },
   });
   // tail: thin swishy chain ending in a big tuft
   const tp: V3 = [0, 0.26, -0.25];
@@ -2138,8 +2139,8 @@ function buildShellby(c: Ctx): Critter {
   const { scene: s, k } = c;
   // shell shaped like a heraldic shield (broad front, pointed back) with a light rim and a heart emblem
   const body: Mesh[] = [
-    shieldDome(s, [0.27, 0.215, 0.3], [0, 0.2, -0.04], P.shell, P.shellB, 0.5, 0.15, 20),
-    shieldDome(s, [0.295, 0.05, 0.325], [0, 0.19, -0.04], P.rim, undefined, 0.5, 1, 20),
+    shieldDome(s, [0.25, 0.22, 0.26], [0, 0.2, 0.0], P.shell, P.shellB, 1.3, 0.15, 24),
+    shieldDome(s, [0.275, 0.05, 0.285], [0, 0.19, 0.0], P.rim, undefined, 1.3, 1, 24),
     blobM(s, [0.215, 0.055, 0.25], [0, 0.15, -0.03], P.under, undefined, undefined, 12),
     // neck + little tail
     blobM(s, [0.085, 0.085, 0.12], [0, 0.25, 0.2], P.skin, [-0.3, 0, 0]),
@@ -2147,9 +2148,11 @@ function buildShellby(c: Ctx): Critter {
   ];
   // emblem on top (lobes toward the head)
   const emN: V3 = norm([0, 1, -0.28]);
-  const emP: V3 = [0, 0.41, -0.07];
-  if (c.rare) body.push(puffStar(s, 5, 0.1, 0.048, 0.022, emP, P.emblem, [rotZTo(emN)[0], rotZTo(emN)[1], Math.PI]));
-  else body.push(heartM(s, 0.095, 0.022, emP, P.emblem, [rotZTo(emN)[0], rotZTo(emN)[1], Math.PI]));
+  const emP: V3 = [0, 0.415, -0.05];
+  if (c.rare) body.push(puffStar(s, 5, 0.105, 0.05, 0.022, emP, P.emblem, rotZTo(emN)));
+  else body.push(heartM(s, 0.1, 0.024, emP, P.emblem, rotZTo(emN)));
+  // heraldic border just inside the rim
+  body.push(...tubeM(s, shieldRing([0.25, 0.22, 0.26], [0, 0.2, 0], 1.3, 0.8, 44, 0.004), 0.011, P.rim, false));
   k.part("body", c.base, [0, 0, 0], body, { outline: 0.02 });
 
   // stubby legs in two diagonal pairs
@@ -2167,14 +2170,17 @@ function buildShellby(c: Ctx): Critter {
   const hp: V3 = [0, 0.27, 0.24];
   const head = k.node("head", c.base, hp);
   const HE: Ell = { c: [0, 0.35, 0.34], r: [0.14, 0.13, 0.13] };
+  const HD: Ell = { c: [0, 0.41, 0.322], r: [0.15, 0.105, 0.146] };
   const hs = (): Mesh[] => {
     const hs: Mesh[] = [
       blobM(s, HE.r, HE.c, P.skin, undefined, P.skinB, 14),
-      // tiny knight helmet: dome + band + a jewel at the front
-      blobM(s, [0.148, 0.085, 0.142], [0, 0.415, 0.325], P.helm, [-0.12, 0, 0], P.helmB, 14),
-      blobM(s, [0.152, 0.024, 0.146], [0, 0.4, 0.33], P.band, [-0.12, 0, 0], undefined, 14),
-      ballM(s, 0.02, [0, 0.415, 0.475], P.gem, undefined, 6),
+      // tiny knight helmet: dome, rim band, a ridge over the top, cheek guards and a jewel at the front
+      blobM(s, HD.r, HD.c, P.helm, undefined, P.helmB, 14),
+      blobM(s, [0.153, 0.024, 0.147], [0, 0.398, 0.328], P.band, [-0.1, 0, 0], undefined, 14),
+      ballM(s, 0.021, [0, 0.41, 0.476], P.gem, undefined, 6),
+      ...tubeM(s, [0.45, 0.85, 1.2, 1.5].map((pt) => surf(HD, 0, pt, 0.004).p).concat([1.2, 0.8].map((pt) => surf(HD, Math.PI, pt, 0.004).p)), 0.014, P.band),
     ];
+    for (const sd of [-1, 1]) hs.push(blobM(s, [0.03, 0.065, 0.07], [sd * 0.14, 0.355, 0.31], P.helm, [0, 0, sd * 0.15], P.helmB, 10));
     return hs;
   };
   const faces = buildHeads(k, head, hp, hs, {

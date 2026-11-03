@@ -621,7 +621,7 @@ function buildThornbug(scene: Scene): Enemy {
       const a: V3 = [sd * 0.2, 0.16, z];
       const k: V3 = [sd * 0.29, 0.11, z + 0.02];
       const f: V3 = [sd * 0.31, 0.04, z + 0.04];
-      ls.push(...tubeM(s, [a, k, f], 0.04, "#33274d"));
+      ls.push(...tubeM(s, [a, k, f], 0.04, "#33274d", false));
       ls.push(blobM(s, [0.06, 0.04, 0.07], [f[0], 0.035, f[2] + 0.01], "#45366a", undefined, "#2a2040", 6));
     }
     makePart(s, "legs" + g, n, [0, 0, 0], [0, 0, 0], { shapes: ls, material: legMat, shadow: false });
@@ -675,9 +675,9 @@ function buildPuffspitter(scene: Scene): Enemy {
   for (let i = 0; i < 7; i++) {
     const a = Math.PI * 0.42 + (i / 6) * Math.PI * 1.16;
     const r = 0.36;
-    cs.push(ballM(s, 0.16 + (i % 2) * 0.03, [Math.sin(a) * r, 0.68 + (i % 3) * 0.03, Math.cos(a) * r], capTop, capBot, 8));
+    cs.push(ballM(s, 0.16 + (i % 2) * 0.03, [Math.sin(a) * r, 0.68 + (i % 3) * 0.03, Math.cos(a) * r], capTop, capBot, 6));
   }
-  cs.push(ballM(s, 0.2, [0.13, 0.9, -0.1], "#8466b0", capTop, 8), ballM(s, 0.17, [-0.16, 0.88, -0.02], "#8466b0", capTop, 8));
+  cs.push(ballM(s, 0.2, [0.13, 0.9, -0.1], "#8466b0", capTop, 7), ballM(s, 0.17, [-0.16, 0.88, -0.02], "#8466b0", capTop, 7));
   cs.push(
     ...thornsOn(
       s,
@@ -838,8 +838,10 @@ function buildGloomking(scene: Scene): Enemy {
       const sd = i ? 1 : -1;
       const a = arms[i];
       const swing = Math.sin(e.th + i * Math.PI) * 0.25 * e.move;
-      a.rotation.set(-swing - raise * 0.35, 0, sd * (raise * 1.6 + 0.06 * Math.sin(t * 2.2 + i)));
+      a.rotation.set(-swing - raise * 0.3, 0, sd * (raise * 2.1 + 0.06 * Math.sin(t * 2.2 + i)));
     }
+    // rumbling anticipation before the jump
+    if (e.atkT >= 0 && e.atkT < 0.42) e.p.base.position.x += Math.sin(t * 58) * 0.035 * Math.min(1, e.atkT / 0.2);
     crown.rotation.set(e.jig * 0.25 + Math.sin(t * 1.7) * 0.03, 0, Math.sin(t * 1.2) * 0.05 + Math.sin(t * 45) * 0.05 * wd - e.jig * 0.15);
     crown.position.y = crPiv[1] + Math.max(0, -e.jig) * 0.15 + e.atk("y") * 0.12;
     capeN.rotation.set(-0.06 - e.move * 0.12 - e.atk("y") * 0.2 + Math.sin(t * 1.4) * 0.03, Math.sin(t * 0.9) * 0.05, Math.sin(t * 1.1) * 0.03);
