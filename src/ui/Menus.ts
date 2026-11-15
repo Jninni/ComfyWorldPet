@@ -157,7 +157,7 @@ export function showCreator(g: Game): Promise<{ look: PlayerLook; name: string }
       row("Hair", "hair"),
       row("Outfit", "outfit"),
       h(
-        ".row",
+        ".row.creator-foot",
         { style: { justifyContent: "center", marginTop: "12px" } },
         h(
           "button.btn",
@@ -169,6 +169,7 @@ export function showCreator(g: Game): Promise<{ look: PlayerLook; name: string }
               audio.sfx("confirm");
               nav.dispose();
               panel.remove();
+              g.creatorFraming = false;
               g.player.model.emote("wave");
               resolve({ look, name: (name || "Sunny").slice(0, 12) });
             },
@@ -178,6 +179,10 @@ export function showCreator(g: Game): Promise<{ look: PlayerLook; name: string }
       ),
     );
     g.ui.root.append(panel);
+    g.creatorFraming = true;
+    // face the camera while you dress up
+    g.player.rot = 0;
+    g.player.sync();
     const nav = new Nav(panel);
     nav.focusFirst();
     apply();

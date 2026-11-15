@@ -108,6 +108,8 @@ export class Game {
   private enteredAt = 0;
   private lastPet = new Map<number, number>();
   private xpTick = 0;
+  /** character creator open: frame the player beside/above the panel */
+  creatorFraming = false;
   /** the party critter you're riding */
   riding: { f: Follower; scale: number; seat: number } | null = null;
   private trailT = 0;
@@ -864,6 +866,16 @@ export class Game {
     const t = new Vector3(pp.x - Math.cos(fwd) * 1.0, this.player.groundY + 1.1, pp.z - Math.sin(fwd) * 1.0);
     if (f?.follow) {
       return { target: t, alpha: f.alpha + this.camYaw, beta: f.beta, radius: f.radius * this.zoomMul };
+    }
+    if (this.creatorFraming) {
+      // character creator: zoom in and put the player in the part of the screen the panel doesn't cover
+      const portrait = window.innerHeight > window.innerWidth;
+      const small = Math.min(window.innerWidth, window.innerHeight) < 700;
+      // look from the north (the cottage is south of the start spot, so it can't block the view)
+      const ft = new Vector3(pp.x, pp.y + 0.9, pp.z);
+      if (portrait) ft.z += small ? 3.4 : 2.2;
+      else ft.x -= small ? 1.9 : 1.5;
+      return { target: ft, alpha: Math.PI / 2, beta: 1.12, radius: portrait ? 8.5 : 7.5 };
     }
     const sprintZoom = this.player.sprinting && this.player.speed > 0.9 ? 1.07 : 1;
     return { target: t, alpha: -Math.PI / 2 + this.camYaw, beta: CAM_BETA, radius: CAM_RADIUS * this.zoomMul * sprintZoom };

@@ -545,6 +545,7 @@ body.touch .dialogue {
 .modal {
   width: min(940px, calc(100vw - 28px));
   max-height: calc(100vh - 28px - var(--safe-t) - var(--safe-b));
+  max-height: calc(100dvh - 28px - var(--safe-t) - var(--safe-b));
   display: flex;
   flex-direction: column;
   animation: popIn 0.4s cubic-bezier(0.3, 1.5, 0.5, 1) both;
@@ -959,6 +960,69 @@ body.touch .touch-ui {
   width: min(400px, 46vw);
   z-index: 35;
   animation: popIn 0.4s cubic-bezier(0.3, 1.5, 0.5, 1) both;
+  /* never taller than the screen: scroll inside instead (iPhone!) */
+  max-height: calc(100vh - 24px - var(--safe-t) - var(--safe-b));
+  max-height: calc(100dvh - 24px - var(--safe-t) - var(--safe-b));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
+}
+/* the confirm button always stays visible at the bottom of the panel */
+.creator-foot {
+  position: sticky;
+  bottom: -18px;
+  margin: 8px -20px -18px !important;
+  padding: 10px 12px calc(12px + var(--safe-b)) !important;
+  background: linear-gradient(rgba(255, 253, 248, 0), var(--white) 30%);
+  z-index: 2;
+}
+/* phones in portrait: a bottom sheet so the character stays visible above it */
+@media (max-width: 700px) and (orientation: portrait) {
+  .creator {
+    left: calc(8px + var(--safe-l));
+    right: calc(8px + var(--safe-r));
+    top: auto;
+    bottom: calc(8px + var(--safe-b));
+    transform: none;
+    width: auto;
+    max-height: 56vh;
+    max-height: 56dvh;
+    padding: 14px 16px 18px;
+  }
+  .creator .swatches {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    padding: 6px 4px;
+    touch-action: pan-x pan-y;
+  }
+  .creator .swatch {
+    flex: none;
+  }
+  .creator h2 {
+    font-size: 22px;
+  }
+}
+/* phones in landscape: a slim scrolling side panel */
+@media (max-height: 520px) and (orientation: landscape) {
+  .creator {
+    top: calc(8px + var(--safe-t));
+    bottom: calc(8px + var(--safe-b));
+    transform: none;
+    width: min(420px, 52vw);
+    max-height: none;
+    padding: 12px 16px 18px;
+  }
+  .creator .swatch {
+    width: 38px;
+    height: 38px;
+  }
+  .creator .opt-row {
+    margin: 6px 0;
+  }
+  .creator h2 {
+    font-size: 20px;
+  }
 }
 .creator h2 {
   margin: 0 0 6px;
@@ -1197,6 +1261,7 @@ body.touch .dialogue {
 }
 .sew-panel {
   max-height: calc(100vh - 24px);
+  max-height: calc(100dvh - 24px);
   overflow-y: auto;
   width: min(440px, 52vw);
 }
